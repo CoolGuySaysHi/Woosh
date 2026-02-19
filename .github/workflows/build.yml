@@ -68,6 +68,9 @@ jobs:
           done
           iconutil -c icns assets/icon.iconset -o assets/icon.icns
 
+      - name: Fix python (electron-builder 21 needs python not python3)
+        run: sudo ln -sf /usr/bin/python3 /usr/bin/python
+
       - name: Build Mac DMG
         run: npx electron-builder --mac dmg --x64 --arm64
         env:
