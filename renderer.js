@@ -175,7 +175,8 @@ async function renderBookmarks() {
 }
 
 async function updateBookmarkStar(url) {
-  if (!url || url.startsWith('woosh://')) {
+  // Skip internal pages
+  if (!url || url.startsWith('woosh://') || url.includes('newtab.html') || url.includes('search.html') || url.includes('privacy.html')) {
     btnBookmark.classList.remove('bookmarked');
     return;
   }
@@ -185,16 +186,20 @@ async function updateBookmarkStar(url) {
 
 // Star button — add or remove bookmark
 btnBookmark.addEventListener('click', async () => {
-  if (!currentUrl || currentUrl.startsWith('woosh://')) return;
+  // Use the raw URL from tab data, not the pretty version
+  const tab = tabsData[activeTabId];
+  const rawUrl = tab ? tab.url : currentUrl;
 
-  const isBookmarked = await ipc.invoke('is-bookmarked', currentUrl);
+  if (!rawUrl || rawUrl.startsWith('woosh://') || rawUrl.includes('newtab.html') || rawUrl.includes('search.html') || rawUrl.includes('privacy.html')) return;
+
+  const isBookmarked = await ipc.invoke('is-bookmarked', rawUrl);
 
   if (isBookmarked) {
-    await ipc.invoke('remove-bookmark', currentUrl);
+    await ipc.invoke('remove-bookmark', rawUrl);
     btnBookmark.classList.remove('bookmarked');
   } else {
-    const title = document.title.replace(' — Woosh', '') || currentUrl;
-    await ipc.invoke('add-bookmark', { title, url: currentUrl, favicon: getFaviconUrl(currentUrl) });
+    const title = document.title.replace(' — Woosh', '') || rawUrl;
+    await ipc.invoke('add-bookmark', { title, url: rawUrl, favicon: getFaviconUrl(rawUrl) });
     btnBookmark.classList.add('bookmarked');
 
     // Little pop animation
@@ -299,7 +304,9 @@ ipc.on('url-changed', (e, url) => {
     tabsData[activeTabId].url = url;
   }
   updateLockIcon(url);
-  updateBookmarkStar(url);
+  // Use raw tab URL for bookmark check (not the pretty woosh:// version)
+  const tab = tabsData[activeTabId];
+  updateBookmarkStar(tab ? tab.url : url);
 });
 
 ipc.on('page-loading', (e, isLoading) => {

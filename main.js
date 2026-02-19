@@ -465,6 +465,38 @@ ipcMain.handle('get-current-url', () => { const t = tabs.find(t => t.id === acti
 ipcMain.handle('get-tabs', () => tabs.map(t => ({ id: t.id, url: t.url, title: t.title })));
 ipcMain.handle('get-active-tab', () => activeTabId);
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  // Register Woosh as a handler for http and https
+  // This lets Windows/Mac offer Woosh as a default browser option
+  app.setAsDefaultProtocolClient('http');
+  app.setAsDefaultProtocolClient('https');
+  createWindow();
+});
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+
+// Handle URLs opened via Woosh being set as default browser
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  if (mainWindow) {
+    mainWindow.focus();
+    const tab = tabs.find(t => t.id === activeTabId);
+    if (tab) { tab.view.webContents.loadURL(url); }
+  }
+});
+
+// Windows: handle second-instance launch with URL argument
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (event, argv) => {
+    const url = argv.find(a => a.startsWith('http://') || a.startsWith('https://'));
+    if (url && mainWindow) {
+      mainWindow.focus();
+      const tab = tabs.find(t => t.id === activeTabId);
+      if (tab) tab.view.webContents.loadURL(url);
+    }
+    if (mainWindow) { mainWindow.show(); mainWindow.focus(); }
+  });
+}
