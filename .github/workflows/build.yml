@@ -1,7 +1,5 @@
 name: Build Woosh
 
-# Runs automatically when you create a Release on GitHub
-# Also can be triggered manually from the Actions tab
 on:
   release:
     types: [created]
@@ -26,6 +24,8 @@ jobs:
 
       - name: Build Windows installer
         run: npm run build:win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload .exe to Release
         uses: softprops/action-gh-release@v1
@@ -37,7 +37,6 @@ jobs:
 
       - name: Upload as artifact (manual runs)
         uses: actions/upload-artifact@v4
-        if: github.event_name == 'workflow_dispatch'
         with:
           name: Woosh-Windows
           path: dist/*.exe
@@ -60,7 +59,6 @@ jobs:
       - name: Generate .icns icon
         run: |
           mkdir -p assets/icon.iconset
-          # Copy the PNG files to iconset
           for size in 16 32 64 128 256 512; do
             sips -z $size $size assets/icon_512.png --out assets/icon.iconset/icon_${size}x${size}.png
             if [ $size -le 256 ]; then
@@ -72,6 +70,8 @@ jobs:
 
       - name: Build Mac DMG
         run: npm run build:mac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload .dmg to Release
         uses: softprops/action-gh-release@v1
@@ -83,7 +83,6 @@ jobs:
 
       - name: Upload as artifact (manual runs)
         uses: actions/upload-artifact@v4
-        if: github.event_name == 'workflow_dispatch'
         with:
           name: Woosh-Mac
           path: dist/*.dmg
