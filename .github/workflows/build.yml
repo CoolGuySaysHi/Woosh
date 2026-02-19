@@ -69,9 +69,12 @@ jobs:
           iconutil -c icns assets/icon.iconset -o assets/icon.icns
 
       - name: Build Mac DMG
-        run: npm run build:mac
+        run: npx electron-builder --mac dmg --x64 --arm64
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: List dist folder
+        run: ls -la dist/
 
       - name: Upload .dmg to Release
         uses: softprops/action-gh-release@v1
