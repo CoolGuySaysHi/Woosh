@@ -362,3 +362,206 @@ body::before {
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg-deep); }
 ::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 3px; }
+
+/* ===========================
+   Bookmarks Bar
+   =========================== */
+#bookmarks-bar {
+  position: fixed;
+  top: calc(3px + var(--tab-bar-height) + var(--toolbar-height));
+  left: 0; right: 0;
+  height: 28px;
+  background: var(--bg-titlebar);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  gap: 2px;
+  z-index: 998;
+  overflow: hidden;
+}
+
+#bookmarks-list {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  overflow: hidden;
+}
+
+.bookmark-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  background: transparent;
+  border: none;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
+
+.bookmark-item:hover {
+  background: linear-gradient(135deg, rgba(139,108,247,0.15), rgba(240,107,189,0.15));
+  color: var(--text-primary);
+}
+
+.bookmark-favicon {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--accent), var(--pink));
+  color: white;
+  overflow: hidden;
+}
+
+.bookmark-favicon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.bookmark-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#bookmarks-empty {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+  display: none;
+}
+
+#bookmarks-empty.visible {
+  display: block;
+}
+
+/* Star button - glows when bookmarked */
+#btn-bookmark {
+  flex-shrink: 0;
+}
+
+#btn-bookmark.bookmarked svg {
+  fill: var(--yellow);
+  stroke: var(--yellow);
+  filter: drop-shadow(0 0 6px rgba(245, 215, 93, 0.6));
+}
+
+#btn-bookmark:hover {
+  color: var(--yellow) !important;
+}
+
+/* ===========================
+   Bookmark Context Menu
+   =========================== */
+#bookmark-context-menu {
+  position: fixed;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  z-index: 9999;
+  display: none;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  min-width: 160px;
+}
+
+#bookmark-context-menu.visible {
+  display: block;
+}
+
+#ctx-remove {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  color: #f55d5d;
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  transition: background 0.1s;
+}
+
+#ctx-remove:hover {
+  background: rgba(245, 93, 93, 0.15);
+}
+
+/* ===========================
+   Tab favicons
+   =========================== */
+.tab-favicon {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tab-favicon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ===========================
+   Privacy Shield Button
+   =========================== */
+#btn-shield {
+  position: relative;
+  flex-shrink: 0;
+}
+
+#btn-shield.active svg {
+  stroke: var(--green);
+  filter: drop-shadow(0 0 5px rgba(93,245,168,0.5));
+}
+
+#shield-count {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: linear-gradient(135deg, var(--green), var(--cyan));
+  color: #000;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 700;
+  border-radius: 6px;
+  padding: 0 3px;
+  min-width: 12px;
+  height: 12px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+#shield-count.visible {
+  display: flex;
+}

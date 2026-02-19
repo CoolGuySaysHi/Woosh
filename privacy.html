@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Woosh Privacy</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --purple: #8b6cf7; --pink: #f06bbd; --cyan: #5dd8f5;
+      --green: #5df5a8; --yellow: #f5d75d; --red: #f55d5d;
+      --bg: #0a0a0f; --card: #111118; --card2: #14141e;
+      --border: rgba(255,255,255,0.07); --text: #eeeaf8;
+      --muted: #5a566e; --dim: #3a3650;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: var(--bg); color: var(--text); font-family: 'Outfit', sans-serif; min-height: 100vh; }
+    body::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, var(--purple), var(--pink), var(--cyan), var(--green), var(--yellow)); z-index: 100; }
+
+    .page { max-width: 860px; margin: 0 auto; padding: 48px 24px 80px; }
+
+    /* Hero */
+    .hero { text-align: center; margin-bottom: 48px; }
+    .shield-icon { width: 80px; height: 80px; margin: 0 auto 16px; background: linear-gradient(135deg, rgba(93,245,168,0.15), rgba(93,216,245,0.15)); border: 1px solid rgba(93,245,168,0.3); border-radius: 50%; display: flex; align-items: center; justify-content: center; animation: shieldPulse 3s ease-in-out infinite; }
+    .shield-icon svg { width: 40px; height: 40px; stroke: var(--green); filter: drop-shadow(0 0 12px rgba(93,245,168,0.5)); }
+    @keyframes shieldPulse { 0%,100%{box-shadow:0 0 0 0 rgba(93,245,168,0)} 50%{box-shadow:0 0 0 12px rgba(93,245,168,0.08)} }
+    .hero h1 { font-family: 'Fredoka', sans-serif; font-size: 36px; font-weight: 700; background: linear-gradient(135deg, var(--green), var(--cyan)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 8px; }
+    .hero p { font-size: 15px; color: var(--muted); max-width: 400px; margin: 0 auto; line-height: 1.6; }
+
+    /* Stats grid */
+    .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 32px; }
+    .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; text-align: center; transition: all 0.2s; animation: fadeUp 0.4s both; }
+    .stat-card:hover { transform: translateY(-3px); border-color: rgba(93,245,168,0.25); }
+    @keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+    .stat-card:nth-child(2) { animation-delay: 0.08s; }
+    .stat-card:nth-child(3) { animation-delay: 0.16s; }
+    .stat-emoji { font-size: 28px; margin-bottom: 8px; }
+    .stat-num { font-family: 'Fredoka', sans-serif; font-size: 44px; font-weight: 700; line-height: 1; margin-bottom: 6px; }
+    .stat-num.green { background: linear-gradient(135deg, var(--green), var(--cyan)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .stat-num.purple { background: linear-gradient(135deg, var(--purple), var(--pink)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .stat-num.yellow { background: linear-gradient(135deg, var(--yellow), var(--pink)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .stat-label { font-size: 13px; color: var(--muted); font-weight: 500; }
+
+    /* Since badge */
+    .since-badge { text-align: center; margin-bottom: 32px; font-size: 12px; color: var(--dim); font-family: 'DM Mono', monospace; }
+    .since-badge span { color: var(--purple); }
+
+    /* What we block */
+    .section-title { font-family: 'Fredoka', sans-serif; font-size: 20px; font-weight: 600; color: var(--text); margin-bottom: 16px; }
+
+    .block-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 32px; }
+    .block-item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; display: flex; align-items: flex-start; gap: 12px; animation: fadeUp 0.4s both; }
+    .block-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }
+    .block-dot.green { background: var(--green); box-shadow: 0 0 8px rgba(93,245,168,0.5); }
+    .block-dot.cyan { background: var(--cyan); box-shadow: 0 0 8px rgba(93,216,245,0.5); }
+    .block-dot.purple { background: var(--purple); box-shadow: 0 0 8px rgba(139,108,247,0.5); }
+    .block-dot.yellow { background: var(--yellow); box-shadow: 0 0 8px rgba(245,215,93,0.5); }
+    .block-info h3 { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+    .block-info p { font-size: 12px; color: var(--muted); line-height: 1.5; }
+
+    /* Reset button */
+    .reset-wrap { text-align: center; }
+    .reset-btn { background: transparent; border: 1px solid var(--border); border-radius: 8px; padding: 8px 20px; color: var(--muted); font-family: 'Fredoka', sans-serif; font-size: 14px; cursor: pointer; transition: all 0.15s; }
+    .reset-btn:hover { border-color: rgba(245,93,93,0.4); color: var(--red); }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--dim); border-radius: 3px; }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <div class="hero">
+    <div class="shield-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      </svg>
+    </div>
+    <h1>Woosh Privacy</h1>
+    <p>Woosh silently blocks ads and trackers in the background, keeping your browsing fast and private.</p>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-emoji">🛡️</div>
+      <div class="stat-num green" id="total-blocked">—</div>
+      <div class="stat-label">Total blocked</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-emoji">📢</div>
+      <div class="stat-num purple" id="total-ads">—</div>
+      <div class="stat-label">Ads blocked</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-emoji">👁️</div>
+      <div class="stat-num yellow" id="total-trackers">—</div>
+      <div class="stat-label">Trackers stopped</div>
+    </div>
+  </div>
+
+  <div class="since-badge">Tracking since <span id="since-date">—</span></div>
+
+  <div class="section-title">What Woosh blocks</div>
+
+  <div class="block-grid">
+    <div class="block-item">
+      <div class="block-dot green"></div>
+      <div class="block-info">
+        <h3>Ads</h3>
+        <p>Google Ads, banner ads, pop-ups and sponsored content from 30+ ad networks.</p>
+      </div>
+    </div>
+    <div class="block-item">
+      <div class="block-dot cyan"></div>
+      <div class="block-info">
+        <h3>Trackers</h3>
+        <p>Analytics scripts that track which sites you visit and build a profile about you.</p>
+      </div>
+    </div>
+    <div class="block-item">
+      <div class="block-dot purple"></div>
+      <div class="block-info">
+        <h3>Social spies</h3>
+        <p>Facebook and Twitter buttons that track you even when you don't click them.</p>
+      </div>
+    </div>
+    <div class="block-item">
+      <div class="block-dot yellow"></div>
+      <div class="block-info">
+        <h3>Telemetry</h3>
+        <p>Background data collection from companies measuring your behaviour without asking.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="reset-wrap">
+    <button class="reset-btn" id="reset-btn">Reset stats</button>
+  </div>
+
+</div>
+
+<script>
+const ipc = window.ipc;
+
+function fmt(n) {
+  if (n >= 1000000) return (n/1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n/1000).toFixed(1) + 'K';
+  return n.toString();
+}
+
+async function loadStats() {
+  const { lifetime } = await ipc.invoke('get-privacy-stats');
+  document.getElementById('total-blocked').textContent = fmt(lifetime.totalBlocked || 0);
+  document.getElementById('total-ads').textContent = fmt(lifetime.totalAds || 0);
+  document.getElementById('total-trackers').textContent = fmt(lifetime.totalTrackers || 0);
+  const since = new Date(lifetime.since || Date.now());
+  document.getElementById('since-date').textContent = since.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+document.getElementById('reset-btn').addEventListener('click', async () => {
+  if (confirm('Reset all privacy stats to zero?')) {
+    await ipc.invoke('reset-privacy-stats');
+    loadStats();
+  }
+});
+
+loadStats();
+</script>
+</body>
+</html>

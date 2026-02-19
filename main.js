@@ -2,12 +2,135 @@ const { app, BrowserWindow, BrowserView, ipcMain } = require('electron');
 const path = require('path');
 const https = require('https');
 const querystring = require('querystring');
+const fs = require('fs');
+
+// ─── Ad & Tracker Blocker ─────────────────────────────────────
+// Domains to block — covers ads, trackers, telemetry, and malware
+const BLOCKED_DOMAINS = new Set([
+  // Google ads & tracking
+  'googleadservices.com','googlesyndication.com','doubleclick.net',
+  'googletagmanager.com','googletagservices.com','google-analytics.com',
+  'analytics.google.com','adservice.google.com','pagead2.googlesyndication.com',
+  // Facebook
+  'connect.facebook.net','connect.facebook.com','graph.facebook.com',
+  'an.facebook.com','staticxx.facebook.com',
+  // Amazon ads
+  'aax.amazon-adsystem.com','s.amazon-adsystem.com',
+  // Twitter/X tracking
+  'static.ads-twitter.com','analytics.twitter.com','t.co',
+  // Major ad networks
+  'ads.yahoo.com','advertising.com','adblade.com','adroll.com',
+  'criteo.com','criteo.net','pubmatic.com','rubiconproject.com',
+  'openx.net','openx.com','appnexus.com','casalemedia.com',
+  'smartadserver.com','taboola.com','outbrain.com','revcontent.com',
+  'zergnet.com','mgid.com','disqus.com','quantserve.com',
+  // Analytics & trackers
+  'hotjar.com','mouseflow.com','fullstory.com','mixpanel.com',
+  'segment.com','amplitude.com','heap.io','kissmetrics.com',
+  'optimizely.com','crazyegg.com','clicktale.com',
+  // Telemetry
+  'scorecardresearch.com','comscore.com','chartbeat.com',
+  'newrelic.com','nr-data.net','ping.chartbeat.net',
+  // Pop-up/malware
+  'popcash.net','popads.net','propellerads.com','adcash.com',
+  'yllix.com','exoclick.com',
+]);
+
+// Per-tab block counters  { tabId: { ads: N, trackers: N } }
+const blockStats = {};
+// Lifetime stats saved to disk
+const STATS_FILE = path.join(__dirname, 'privacy-stats.json');
+
+function loadStats() {
+  try {
+    if (fs.existsSync(STATS_FILE)) return JSON.parse(fs.readFileSync(STATS_FILE, 'utf-8'));
+  } catch(e) {}
+  return { totalAds: 0, totalTrackers: 0, totalBlocked: 0, since: Date.now() };
+}
+
+function saveStats(stats) {
+  try { fs.writeFileSync(STATS_FILE, JSON.stringify(stats, null, 2)); } catch(e) {}
+}
+
+let lifetimeStats = loadStats();
+
+function isDomainBlocked(url) {
+  try {
+    const hostname = new URL(url).hostname.replace(/^www\./, '');
+    // Check exact match and parent domains
+    if (BLOCKED_DOMAINS.has(hostname)) return true;
+    const parts = hostname.split('.');
+    for (let i = 1; i < parts.length - 1; i++) {
+      if (BLOCKED_DOMAINS.has(parts.slice(i).join('.'))) return true;
+    }
+  } catch(e) {}
+  return false;
+}
+
+function isTrackerDomain(url) {
+  try {
+    const hostname = new URL(url).hostname;
+    return hostname.includes('analytics') || hostname.includes('tracker') ||
+           hostname.includes('telemetry') || hostname.includes('metric') ||
+           hostname.includes('segment') || hostname.includes('pixel');
+  } catch(e) { return false; }
+}
+
+ipcMain.handle('get-privacy-stats', () => ({
+  lifetime: lifetimeStats,
+  perTab: blockStats
+}));
+
+ipcMain.handle('reset-privacy-stats', () => {
+  lifetimeStats = { totalAds: 0, totalTrackers: 0, totalBlocked: 0, since: Date.now() };
+  saveStats(lifetimeStats);
+  return lifetimeStats;
+});
+
+// ─── Bookmarks stored in bookmarks.json next to main.js ───────
+const BOOKMARKS_FILE = path.join(__dirname, 'bookmarks.json');
+
+function loadBookmarks() {
+  try {
+    if (fs.existsSync(BOOKMARKS_FILE)) {
+      return JSON.parse(fs.readFileSync(BOOKMARKS_FILE, 'utf-8'));
+    }
+  } catch(e) {}
+  return [];
+}
+
+function saveBookmarks(bookmarks) {
+  try {
+    fs.writeFileSync(BOOKMARKS_FILE, JSON.stringify(bookmarks, null, 2));
+  } catch(e) {}
+}
+
+ipcMain.handle('get-bookmarks', () => loadBookmarks());
+
+ipcMain.handle('add-bookmark', (e, { title, url, favicon }) => {
+  const bookmarks = loadBookmarks();
+  // Don't add duplicates
+  if (bookmarks.find(b => b.url === url)) return bookmarks;
+  bookmarks.push({ title, url, favicon, added: Date.now() });
+  saveBookmarks(bookmarks);
+  return bookmarks;
+});
+
+ipcMain.handle('remove-bookmark', (e, url) => {
+  const bookmarks = loadBookmarks().filter(b => b.url !== url);
+  saveBookmarks(bookmarks);
+  return bookmarks;
+});
+
+ipcMain.handle('is-bookmarked', (e, url) => {
+  return loadBookmarks().some(b => b.url === url);
+});
 
 let mainWindow;
 let tabs = [];
 let activeTabId = 0;
 let nextTabId = 1;
-const TOOLBAR_HEIGHT = 96;
+const TOOLBAR_HEIGHT = 124;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -20,7 +143,6 @@ function createWindow() {
     backgroundColor: '#0a0a0f'
   });
   mainWindow.loadFile('index.html');
-
 
   mainWindow.on('resize', () => updateActiveViewBounds());
   createTab('woosh://home');
@@ -186,7 +308,7 @@ function clean(html) {
 // ─── URL helpers ──────────────────────────────────────────────
 function resolveURL(url) {
   if (!url || url === 'woosh://home') return null;
-  if (url.startsWith('woosh://search?')) return null;
+  if (url.startsWith('woosh://')) return null;
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
   if (url.includes('.') && !url.includes(' ')) return 'https://' + url;
   return `woosh://search?q=${encodeURIComponent(url)}`;
@@ -195,6 +317,8 @@ function resolveURL(url) {
 function loadURLInView(view, url) {
   if (url === 'woosh://home') {
     view.webContents.loadFile('newtab.html');
+  } else if (url === 'woosh://privacy') {
+    view.webContents.loadFile('privacy.html');
   } else if (url && url.startsWith('woosh://search?')) {
     const raw = url.slice('woosh://search?q='.length);
     view.webContents.loadFile('search.html', { query: { q: decodeURIComponent(raw) } });
@@ -206,6 +330,7 @@ function loadURLInView(view, url) {
 function prettyURL(url) {
   if (!url) return 'woosh://home';
   if (url.includes('newtab.html')) return 'woosh://home';
+  if (url.includes('privacy.html')) return 'woosh://privacy';
   if (url.includes('search.html')) {
     try {
       const u = new URL(url);
@@ -227,10 +352,37 @@ function createTab(url = 'woosh://home') {
   });
   const tab = { id, view, url, title: 'New Tab' };
   tabs.push(tab);
+  blockStats[id] = { ads: 0, trackers: 0 };
+
+  // ── Ad & tracker blocking ──
+  view.webContents.session.webRequest.onBeforeRequest({ urls: ['*://*/*'] }, (details, callback) => {
+    if (isDomainBlocked(details.url)) {
+      const isTracker = isTrackerDomain(details.url);
+      blockStats[id].ads++;
+      if (isTracker) blockStats[id].trackers++;
+      lifetimeStats.totalBlocked++;
+      lifetimeStats.totalAds++;
+      if (isTracker) lifetimeStats.totalTrackers++;
+      saveStats(lifetimeStats);
+      // Send live update to toolbar shield
+      if (id === activeTabId) {
+        mainWindow.webContents.send('blocked-update', blockStats[id]);
+      }
+      callback({ cancel: true });
+    } else {
+      callback({ cancel: false });
+    }
+  });
 
   view.webContents.on('did-navigate', (e, navUrl) => {
     tab.url = navUrl;
-    if (id === activeTabId) { mainWindow.webContents.send('url-changed', prettyURL(navUrl)); mainWindow.webContents.send('page-loading', false); }
+    // Reset per-page block counter on navigation
+    blockStats[id] = { ads: 0, trackers: 0 };
+    if (id === activeTabId) {
+      mainWindow.webContents.send('url-changed', prettyURL(navUrl));
+      mainWindow.webContents.send('page-loading', false);
+      mainWindow.webContents.send('blocked-update', blockStats[id]);
+    }
     mainWindow.webContents.send('tab-updated', { id, url: navUrl, title: tab.title });
   });
   view.webContents.on('did-navigate-in-page', (e, navUrl) => { tab.url = navUrl; if (id === activeTabId) mainWindow.webContents.send('url-changed', prettyURL(navUrl)); });
@@ -259,6 +411,7 @@ function switchToTab(id) {
   mainWindow.webContents.send('url-changed', prettyURL(tab.url));
   mainWindow.webContents.send('title-changed', tab.title);
   mainWindow.webContents.send('tab-switched', id);
+  mainWindow.webContents.send('blocked-update', blockStats[id] || { ads: 0, trackers: 0 });
 }
 
 function closeTab(id) {
