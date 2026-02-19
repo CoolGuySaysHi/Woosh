@@ -1,0 +1,364 @@
+/* ===========================
+   Woosh Browser — CSS
+   Colorful · Fun · Purple
+   =========================== */
+
+:root {
+  --bg-deep:      #0a0a0f;
+  --bg-toolbar:   #111118;
+  --bg-tab-bar:   #0d0d14;
+  --bg-input:     #1a1a26;
+  --bg-hover:     #1f1f30;
+  --bg-tab:       #161622;
+  --bg-tab-active:#1e1e2e;
+
+  --purple:       #8b6cf7;
+  --pink:         #f06bbd;
+  --cyan:         #5dd8f5;
+  --green:        #5df5a8;
+  --yellow:       #f5d75d;
+  --orange:       #f5935d;
+
+  --accent:         var(--purple);
+  --accent-glow:    rgba(139, 108, 247, 0.35);
+  --accent-dim:     rgba(139, 108, 247, 0.15);
+
+  --text-primary:   #eeeaf8;
+  --text-secondary: #7a7590;
+  --text-muted:     #3d3a50;
+  --text-tab:       #9990bb;
+  --text-tab-active:#eeeaf8;
+
+  --border:         rgba(255,255,255,0.06);
+  --border-focus:   rgba(139, 108, 247, 0.6);
+
+  --tab-bar-height: 40px;
+  --toolbar-height: 56px;
+
+  --font-ui:   'Fredoka', sans-serif;
+  --font-mono: 'DM Mono', monospace;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-tab: 8px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+/* ===========================
+   Rainbow top stripe
+   =========================== */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg,
+    var(--purple) 0%,
+    var(--pink) 25%,
+    var(--cyan) 50%,
+    var(--green) 75%,
+    var(--yellow) 100%
+  );
+  z-index: 9999;
+}
+
+/* ===========================
+   Tab Bar
+   =========================== */
+#tab-bar {
+  position: fixed;
+  top: 3px; left: 0; right: 0;
+  height: var(--tab-bar-height);
+  background: var(--bg-tab-bar);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  gap: 4px;
+  z-index: 1000;
+}
+
+#drag-region-tabs {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  -webkit-app-region: drag;
+  z-index: 0;
+}
+
+#tabs-container {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  z-index: 1;
+  -webkit-app-region: no-drag;
+}
+
+/* Individual tab */
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px 0 12px;
+  height: 30px;
+  border-radius: var(--radius-tab);
+  background: var(--bg-tab);
+  border: 1px solid transparent;
+  color: var(--text-tab);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  max-width: 200px;
+  min-width: 80px;
+  transition: all 0.15s ease;
+  position: relative;
+  -webkit-app-region: no-drag;
+}
+
+.tab:hover {
+  background: var(--bg-hover);
+  color: var(--text-tab-active);
+}
+
+.tab.active {
+  background: var(--bg-tab-active);
+  border-color: var(--border-focus);
+  color: var(--text-tab-active);
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+
+/* Tab color accent dot */
+.tab.active::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 50%; transform: translateY(-50%);
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: var(--purple);
+}
+
+.tab-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+
+.tab-close {
+  width: 16px; height: 16px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.1s ease;
+  -webkit-app-region: no-drag;
+}
+
+.tab-close:hover {
+  background: rgba(240, 107, 189, 0.2);
+  color: var(--pink);
+}
+
+.tab-close svg { width: 10px; height: 10px; }
+
+/* New tab button */
+#btn-new-tab {
+  width: 28px; height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+  -webkit-app-region: no-drag;
+}
+
+#btn-new-tab svg { width: 14px; height: 14px; }
+
+#btn-new-tab:hover {
+  background: var(--bg-hover);
+  color: var(--cyan);
+}
+
+/* Window controls */
+#window-controls {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+  -webkit-app-region: no-drag;
+  margin-left: 6px;
+}
+
+.wc-btn {
+  width: 26px; height: 26px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.wc-btn svg { width: 12px; height: 12px; }
+.wc-btn:hover { background: var(--bg-hover); color: var(--text-secondary); }
+#btn-close:hover { background: rgba(245, 93, 93, 0.2); color: #f55d5d; }
+#btn-minimize:hover { background: rgba(245, 215, 93, 0.15); color: var(--yellow); }
+#btn-maximize:hover { background: rgba(93, 245, 168, 0.15); color: var(--green); }
+
+/* ===========================
+   Toolbar
+   =========================== */
+#toolbar {
+  position: fixed;
+  top: calc(3px + var(--tab-bar-height));
+  left: 0; right: 0;
+  height: var(--toolbar-height);
+  background: var(--bg-toolbar);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  z-index: 999;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+}
+
+#nav-buttons {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.nav-btn {
+  width: 34px; height: 34px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.nav-btn svg { width: 16px; height: 16px; }
+
+.nav-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.nav-btn:active { transform: scale(0.88); }
+.nav-btn:disabled { color: var(--text-muted); cursor: default; }
+.nav-btn:disabled:hover { background: transparent; }
+
+#btn-home:hover { color: var(--pink); }
+#btn-reload:hover { color: var(--cyan); }
+
+.nav-btn.loading svg { animation: spin 0.7s linear infinite; }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ===========================
+   Address Bar
+   =========================== */
+#addressbar-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  background: var(--bg-input);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0 12px;
+  height: 38px;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+#addressbar-wrap:focus-within {
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px var(--accent-dim), 0 0 16px var(--accent-glow);
+  background: #13131f;
+}
+
+#lock-icon {
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+#lock-icon svg { width: 12px; height: 12px; }
+#lock-icon.secure { color: var(--green); }
+
+#addressbar {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  letter-spacing: 0.01em;
+  caret-color: var(--purple);
+}
+
+#addressbar::placeholder { color: var(--text-muted); }
+
+/* ===========================
+   Loading Spinner
+   =========================== */
+#loading-spinner { display: flex; align-items: center; flex-shrink: 0; }
+#loading-spinner.hidden { display: none; }
+
+.spinner {
+  width: 14px; height: 14px;
+  border: 2px solid var(--text-muted);
+  border-top-color: var(--purple);
+  border-right-color: var(--pink);
+  border-radius: 50%;
+  animation: spin 0.5s linear infinite;
+}
+
+/* ===========================
+   Scrollbar
+   =========================== */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-deep); }
+::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 3px; }

@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Woosh Search</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --purple: #8b6cf7;
+      --pink:   #f06bbd;
+      --cyan:   #5dd8f5;
+      --green:  #5df5a8;
+      --yellow: #f5d75d;
+      --bg:     #0a0a0f;
+      --card:   #111118;
+      --card2:  #14141e;
+      --border: rgba(255,255,255,0.07);
+      --text:   #eeeaf8;
+      --muted:  #5a566e;
+      --dim:    #3a3650;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Outfit', sans-serif;
+      min-height: 100vh;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, var(--purple), var(--pink), var(--cyan), var(--green), var(--yellow));
+      z-index: 100;
+    }
+
+    /* ── Header ── */
+    #header {
+      position: sticky; top: 2px;
+      background: rgba(10,10,15,0.95);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex; align-items: center; gap: 16px;
+      z-index: 50;
+    }
+
+    .header-logo {
+      font-family: 'Fredoka', sans-serif; font-size: 26px; font-weight: 700;
+      background: linear-gradient(135deg, var(--purple), var(--pink));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      cursor: pointer; flex-shrink: 0; text-decoration: none;
+    }
+
+    .header-search-box {
+      flex: 1; max-width: 600px;
+      display: flex; align-items: center;
+      background: var(--card); border: 1.5px solid var(--border);
+      border-radius: 50px; padding: 0 6px 0 18px; height: 40px; gap: 8px;
+      transition: all 0.2s;
+    }
+    .header-search-box:focus-within { border-color: rgba(139,108,247,0.6); box-shadow: 0 0 0 3px rgba(139,108,247,0.12); }
+    .header-search-icon { color: var(--muted); display: flex; align-items: center; }
+    .header-search-icon svg { width: 15px; height: 15px; }
+
+    #header-search-input {
+      flex: 1; background: transparent; border: none; outline: none;
+      color: var(--text); font-family: 'Fredoka', sans-serif;
+      font-size: 16px; font-weight: 500; caret-color: var(--purple);
+    }
+    #header-search-input::placeholder { color: var(--muted); }
+
+    .header-search-btn {
+      background: linear-gradient(135deg, var(--purple), var(--pink));
+      border: none; border-radius: 30px; padding: 7px 16px;
+      color: white; font-family: 'Fredoka', sans-serif;
+      font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+    }
+    .header-search-btn:hover { transform: scale(1.04); }
+
+    /* ── Layout ── */
+    #main {
+      max-width: 900px; margin: 0 auto;
+      padding: 24px 24px 60px;
+      display: grid; grid-template-columns: 1fr 260px;
+      gap: 24px; align-items: start;
+    }
+
+    /* ── Stats bar ── */
+    #stats-bar { grid-column: 1/-1; display: flex; align-items: center; justify-content: space-between; }
+    #result-count { font-size: 13px; color: var(--muted); font-family: 'DM Mono', monospace; }
+    #result-count span { color: var(--purple); }
+    .instance-badge { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--dim); font-family: 'DM Mono', monospace; }
+    .instance-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    /* ── Result cards ── */
+    #results-col { display: flex; flex-direction: column; gap: 6px; }
+
+    .result-card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 16px 18px;
+      cursor: pointer; transition: all 0.15s ease;
+      animation: fadeSlide 0.25s both;
+    }
+    .result-card:hover {
+      border-color: rgba(139,108,247,0.35); background: var(--card2);
+      transform: translateX(3px);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.25), -3px 0 0 var(--purple);
+    }
+    @keyframes fadeSlide { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+
+    .result-source { display: flex; align-items: center; gap: 7px; margin-bottom: 5px; }
+    .result-favicon { width: 16px; height: 16px; border-radius: 4px; background: var(--dim); flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; color: #fff; overflow: hidden; }
+    .result-favicon img { width: 100%; height: 100%; object-fit: cover; }
+    .result-domain { font-size: 12px; color: var(--muted); font-family: 'DM Mono', monospace; }
+    .result-title { font-size: 16px; font-weight: 600; color: #c8b8ff; margin-bottom: 5px; line-height: 1.3; display: block; text-decoration: none; }
+    .result-card:hover .result-title { color: #ddd0ff; }
+    .result-snippet { font-size: 13.5px; color: #7a7590; line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .result-snippet b, .result-snippet strong { color: var(--text); font-weight: 600; }
+
+    /* ── Sidebar ── */
+    #sidebar { display: flex; flex-direction: column; gap: 12px; }
+    .sidebar-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; animation: fadeSlide 0.25s 0.1s both; }
+    .sidebar-title { font-family: 'Fredoka', sans-serif; font-size: 12px; font-weight: 600; color: var(--dim); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 10px; }
+    .related-item { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 8px; cursor: pointer; transition: background 0.1s; color: #8880aa; font-size: 13.5px; font-weight: 500; }
+    .related-item:hover { background: rgba(139,108,247,0.12); color: var(--text); }
+    .related-item svg { width: 12px; height: 12px; flex-shrink: 0; color: var(--dim); }
+
+    /* ── Loading ── */
+    #loading { grid-column: 1/-1; display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 80px 0; }
+    .loading-logo { font-family: 'Fredoka', sans-serif; font-size: 40px; font-weight: 700; background: linear-gradient(135deg, var(--purple), var(--pink), var(--cyan)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; animation: glow 1.5s ease-in-out infinite; }
+    @keyframes glow { 0%,100%{filter:brightness(1)} 50%{filter:brightness(1.5) drop-shadow(0 0 20px rgba(139,108,247,0.5))} }
+    .loading-dots { display: flex; gap: 8px; }
+    .loading-dot { width: 10px; height: 10px; border-radius: 50%; animation: bounce 0.7s ease-in-out infinite; }
+    .loading-dot:nth-child(1) { background: var(--purple); animation-delay: 0s; }
+    .loading-dot:nth-child(2) { background: var(--pink);   animation-delay: 0.13s; }
+    .loading-dot:nth-child(3) { background: var(--cyan);   animation-delay: 0.26s; }
+    @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-12px)} }
+    .loading-text { font-size: 13px; color: var(--muted); font-family: 'DM Mono', monospace; }
+
+    /* ── Error ── */
+    #error { grid-column: 1/-1; background: var(--card); border: 1px solid rgba(245,93,93,0.2); border-radius: 16px; padding: 40px; text-align: center; display: none; flex-direction: column; align-items: center; gap: 12px; }
+    #error.visible { display: flex; }
+    .error-emoji { font-size: 40px; }
+    .error-title { font-family: 'Fredoka', sans-serif; font-size: 22px; color: var(--text); }
+    .error-msg { font-size: 13px; color: var(--muted); line-height: 1.6; max-width: 420px; }
+    .error-retry { background: linear-gradient(135deg, var(--purple), var(--pink)); border: none; border-radius: 30px; padding: 10px 28px; color: white; font-family: 'Fredoka', sans-serif; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.15s; margin-top: 4px; }
+    .error-retry:hover { transform: scale(1.04); }
+
+    /* ── No results ── */
+    #no-results { grid-column: 1/-1; text-align: center; padding: 70px 0; display: none; }
+    #no-results.visible { display: block; }
+    .nr-emoji { font-size: 48px; margin-bottom: 14px; }
+    .nr-title { font-family: 'Fredoka', sans-serif; font-size: 24px; color: var(--text); margin-bottom: 6px; }
+    .nr-sub { font-size: 14px; color: var(--muted); }
+
+    /* ── Skeleton ── */
+    .skeleton { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px 18px; display: flex; flex-direction: column; gap: 9px; }
+    .skel-line { height: 13px; background: linear-gradient(90deg, var(--card2) 25%, rgba(255,255,255,0.04) 50%, var(--card2) 75%); background-size: 200% 100%; border-radius: 5px; animation: skelShimmer 1.4s infinite; }
+    @keyframes skelShimmer { from{background-position:200% 0} to{background-position:-200% 0} }
+    .skel-line.s{width:38%} .skel-line.m{width:68%;height:18px} .skel-line.l{width:100%} .skel-line.l2{width:85%}
+
+    /* ── Pagination ── */
+    #pagination { grid-column: 1/-1; display: flex; justify-content: center; gap: 8px; padding-top: 12px; }
+    .page-btn { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 8px 18px; color: var(--muted); font-family: 'Fredoka', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+    .page-btn:hover, .page-btn.active { background: rgba(139,108,247,0.15); border-color: rgba(139,108,247,0.4); color: var(--text); }
+
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--dim); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+  <div id="header">
+    <a class="header-logo" href="newtab.html" id="home-link">Woosh</a>
+    <div class="header-search-box">
+      <div class="header-search-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+      </div>
+      <input type="text" id="header-search-input" placeholder="Search Woosh..." autocomplete="off" spellcheck="false"/>
+      <button class="header-search-btn" id="header-search-btn">Woosh! 🚀</button>
+    </div>
+  </div>
+
+  <div id="main">
+    <div id="loading">
+      <div class="loading-logo">Woosh</div>
+      <div class="loading-dots">
+        <div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div>
+      </div>
+      <div class="loading-text" id="loading-text">Searching...</div>
+    </div>
+
+    <div id="error">
+      <div class="error-emoji">😵</div>
+      <div class="error-title">Search failed</div>
+      <div class="error-msg" id="error-msg">Something went wrong. Check your internet and try again.</div>
+      <button class="error-retry" id="retry-btn">Try again</button>
+    </div>
+
+    <div id="no-results">
+      <div class="nr-emoji">🔍</div>
+      <div class="nr-title">No results found</div>
+      <div class="nr-sub">Try different search words!</div>
+    </div>
+  </div>
+
+  <script>
+    const ipc = window.ipc;
+    let currentQuery = '';
+    let currentPage = 1;
+
+    function getParam(name) {
+      return new URLSearchParams(window.location.search).get(name) || '';
+    }
+
+    function getDomain(url) {
+      try { return new URL(url).hostname.replace('www.', ''); }
+      catch(e) { return url; }
+    }
+
+    function showSkeletons(container) {
+      container.innerHTML = '';
+      for (let i = 0; i < 7; i++) {
+        const d = document.createElement('div');
+        d.className = 'skeleton';
+        d.style.animationDelay = `${i * 0.04}s`;
+        d.innerHTML = `<div class="skel-line s"></div><div class="skel-line m"></div><div class="skel-line l"></div><div class="skel-line l2"></div>`;
+        container.appendChild(d);
+      }
+    }
+
+    async function runSearch(query, page = 1) {
+      if (!query.trim()) return;
+      currentQuery = query;
+      currentPage = page;
+
+      document.getElementById('header-search-input').value = query;
+      document.title = `${query} — Woosh`;
+
+      document.getElementById('loading').style.display = 'flex';
+      document.getElementById('loading-text').textContent = `Searching for "${query}"...`;
+      document.getElementById('error').classList.remove('visible');
+      document.getElementById('no-results').classList.remove('visible');
+
+      ['stats-bar','results-col','sidebar','pagination'].forEach(id => document.getElementById(id)?.remove());
+
+      const main = document.getElementById('main');
+      const statsBar = Object.assign(document.createElement('div'), { id: 'stats-bar' });
+      const resultsCol = Object.assign(document.createElement('div'), { id: 'results-col' });
+      const sidebar = Object.assign(document.createElement('div'), { id: 'sidebar' });
+      main.appendChild(statsBar);
+      main.appendChild(resultsCol);
+      main.appendChild(sidebar);
+      showSkeletons(resultsCol);
+
+      const response = await ipc.invoke('woosh-search', { query, page });
+      document.getElementById('loading').style.display = 'none';
+
+      if (!response.success) {
+        document.getElementById('error-msg').textContent = response.error;
+        document.getElementById('error').classList.add('visible');
+        resultsCol.innerHTML = '';
+        return;
+      }
+
+      const results = response.data.results || [];
+      const suggestions = response.data.suggestions || [];
+
+      if (results.length === 0) {
+        resultsCol.innerHTML = '';
+        document.getElementById('no-results').classList.add('visible');
+        return;
+      }
+
+      statsBar.innerHTML = `
+        <div id="result-count">About <span>${results.length}</span> results for "<span>${query}</span>"</div>
+        <div class="instance-badge"><div class="instance-dot"></div>${response.instance}</div>`;
+
+      resultsCol.innerHTML = '';
+      results.forEach((r, i) => {
+        const domain = getDomain(r.url);
+        const initial = domain[0]?.toUpperCase() || '?';
+        const card = document.createElement('div');
+        card.className = 'result-card';
+        card.style.animationDelay = `${i * 0.035}s`;
+        card.innerHTML = `
+          <div class="result-source">
+            <div class="result-favicon" id="fav-${i}">${initial}</div>
+            <span class="result-domain">${domain}</span>
+          </div>
+          <a class="result-title" href="${r.url}">${r.title || 'Untitled'}</a>
+          <div class="result-snippet">${r.content || ''}</div>`;
+
+        const favEl = card.querySelector(`#fav-${i}`);
+        const img = new Image();
+        img.onload = () => { favEl.innerHTML = ''; img.style.cssText = 'width:100%;height:100%;object-fit:cover'; favEl.appendChild(img); };
+        try { img.src = new URL(r.url).origin + '/favicon.ico'; } catch(e) {}
+
+        card.addEventListener('click', () => { window.location.href = r.url; });
+        resultsCol.appendChild(card);
+      });
+
+      if (suggestions.length > 0) {
+        sidebar.innerHTML = `
+          <div class="sidebar-card">
+            <div class="sidebar-title">✦ Related searches</div>
+            ${suggestions.map(s => `
+              <div class="related-item" data-q="${s}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                ${s}
+              </div>`).join('')}
+          </div>`;
+        sidebar.querySelectorAll('.related-item').forEach(item => item.addEventListener('click', () => runSearch(item.dataset.q)));
+      }
+
+      const pagination = Object.assign(document.createElement('div'), { id: 'pagination' });
+      pagination.innerHTML = `
+        ${page > 1 ? `<button class="page-btn" id="prev-btn">← Previous</button>` : ''}
+        <button class="page-btn active">Page ${page}</button>
+        <button class="page-btn" id="next-btn">Next →</button>`;
+      main.appendChild(pagination);
+      pagination.querySelector('#next-btn')?.addEventListener('click', () => runSearch(query, page + 1));
+      pagination.querySelector('#prev-btn')?.addEventListener('click', () => runSearch(query, page - 1));
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    document.getElementById('header-search-btn').addEventListener('click', () => {
+      const q = document.getElementById('header-search-input').value.trim();
+      if (q) runSearch(q);
+    });
+    document.getElementById('header-search-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { const q = e.target.value.trim(); if (q) runSearch(q); }
+    });
+    document.getElementById('home-link').addEventListener('click', (e) => { e.preventDefault(); window.location.href = 'newtab.html'; });
+    document.getElementById('retry-btn').addEventListener('click', () => runSearch(currentQuery, currentPage));
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const q = getParam('q');
+      if (q) runSearch(q);
+      else document.getElementById('loading').style.display = 'none';
+    });
+  </script>
+</body>
+</html>
