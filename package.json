@@ -1,11 +1,13 @@
 {
   "name": "woosh-browser",
-  "version": "1.1.0",
+  "version": "1.0.0",
   "description": "Woosh - Your custom browser",
   "main": "main.js",
-  "author": "Thomas Fairfield",
+  "author": "Thomas",
   "scripts": {
     "start": "electron .",
+    "build:win": "electron-builder --win nsis",
+    "build:mac": "electron-builder --mac",
     "build": "electron-builder --win nsis"
   },
   "build": {
@@ -21,22 +23,20 @@
       "!*.log"
     ],
     "win": {
-      "target": [
-        {
-          "target": "nsis",
-          "arch": ["x64"]
-        }
-      ],
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
       "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": [{ "target": "dmg", "arch": ["x64", "arm64"] }],
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.utilities"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Woosh",
-      "installerHeaderIcon": "assets/icon.ico",
-      "deleteAppDataOnUninstall": false
+      "shortcutName": "Woosh"
     }
   },
   "devDependencies": {
