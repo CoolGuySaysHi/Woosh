@@ -3,10 +3,10 @@
   "version": "1.1.2",
   "description": "Woosh - Your custom browser",
   "main": "main.js",
-  "author": "Thomas",
+  "author": "Thomas Fairfield",
   "scripts": {
     "start": "electron .",
-    "build:win": "electron-builder --win nsis --x64",
+    "build:win": "electron-builder --win nsis",
     "build:mac": "electron-builder --mac dmg",
     "build": "electron-builder --win nsis"
   },
