@@ -59,11 +59,8 @@ jobs:
           done
           iconutil -c icns assets/icon.iconset -o assets/icon.icns
 
-      - name: Build Mac DMG (Intel)
-        run: npx electron-builder --mac dmg --x64
-
-      - name: Build Mac DMG (Apple Silicon)
-        run: npx electron-builder --mac dmg --arm64
+      - name: Build Mac DMG
+        run: npm run build:mac
 
       - name: Upload to Release
         if: github.event_name == 'release'
