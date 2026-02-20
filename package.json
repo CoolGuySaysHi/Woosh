@@ -15,8 +15,8 @@
     "productName": "Woosh",
     "directories": { "output": "dist" },
     "files": ["**/*", "!node_modules/.cache", "!dist", "!*.log"],
-   "win": { "target": "nsis", "icon": "assets/icon.ico", "publish": "never" },
-"mac": { "target": "dmg", "icon": "assets/icon.icns", "category": "public.app-category.utilities", "publish": "never" },
+   "win": { "target": "nsis", "icon": "assets/icon.ico", "publish": "null" },
+"mac": { "target": "dmg", "icon": "assets/icon.icns", "category": "public.app-category.utilities", "publish": "null" },
     "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "createDesktopShortcut": true, "createStartMenuShortcut": true, "shortcutName": "Woosh" }
   },
   "devDependencies": {
