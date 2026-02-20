@@ -5,17 +5,16 @@ on:
     types: [created]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
 
-  # ── Windows build ──────────────────────────────────────────
   build-windows:
     runs-on: windows-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 18
 
@@ -24,32 +23,24 @@ jobs:
 
       - name: Build Windows installer
         run: npm run build:win
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload .exe to Release
-        uses: softprops/action-gh-release@v1
+      - name: Upload to Release
         if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
         with:
           files: dist/*.exe
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload as artifact (manual runs)
+      - name: Upload as artifact
         uses: actions/upload-artifact@v4
         with:
           name: Woosh-Windows
           path: dist/*.exe
 
-  # ── Mac build ──────────────────────────────────────────────
   build-mac:
     runs-on: macos-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 18
 
@@ -69,22 +60,15 @@ jobs:
           iconutil -c icns assets/icon.iconset -o assets/icon.icns
 
       - name: Build Mac DMG
-        run: npx electron-builder --mac dmg --x64 --arm64
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run build:mac
 
-      - name: List dist folder
-        run: ls -la dist/
-
-      - name: Upload .dmg to Release
-        uses: softprops/action-gh-release@v1
+      - name: Upload to Release
         if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
         with:
           files: dist/*.dmg
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload as artifact (manual runs)
+      - name: Upload as artifact
         uses: actions/upload-artifact@v4
         with:
           name: Woosh-Mac
