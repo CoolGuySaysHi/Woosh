@@ -1,75 +1,54 @@
-name: Build Woosh
-
-on:
-  release:
-    types: [created]
-  workflow_dispatch:
-
-permissions:
-  contents: write
-
-jobs:
-
-  build-windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 18
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Build Windows installer
-        run: npm run build:win
-
-      - name: Upload to Release
-        if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/*.exe
-
-      - name: Upload as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Woosh-Windows
-          path: dist/*.exe
-
-  build-mac:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 18
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Generate .icns icon
-        run: |
-          mkdir -p assets/icon.iconset
-          for size in 16 32 64 128 256 512; do
-            sips -z $size $size assets/icon_512.png --out assets/icon.iconset/icon_${size}x${size}.png
-            if [ $size -le 256 ]; then
-              double=$((size*2))
-              sips -z $double $double assets/icon_512.png --out assets/icon.iconset/icon_${size}x${size}@2x.png
-            fi
-          done
-          iconutil -c icns assets/icon.iconset -o assets/icon.icns
-
-      - name: Build Mac DMG
-        run: npm run build:mac
-
-      - name: Upload to Release
-        if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/*.dmg
-
-      - name: Upload as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Woosh-Mac
-          path: dist/*.dmg
+{
+  "name": "woosh-browser",
+  "version": "1.0.0",
+  "description": "Woosh - Your custom browser",
+  "main": "main.js",
+  "author": "Thomas",
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win nsis",
+    "build:mac": "electron-builder --mac dmg",
+    "build": "electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "com.thomas.woosh",
+    "productName": "Woosh",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!node_modules/.cache",
+      "!dist",
+      "!*.log",
+      "!build-mac.sh"
+    ],
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": [{ "target": "dmg", "arch": ["x64", "arm64"] }],
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.utilities"
+    },
+    "dmg": {
+      "contents": [
+        { "x": 130, "y": 220 },
+        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+      ],
+      "window": { "width": 540, "height": 380 }
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Woosh"
+    }
+  },
+  "devDependencies": {
+    "electron": "28.0.0",
+    "electron-builder": "^24.0.0"
+  }
+}
