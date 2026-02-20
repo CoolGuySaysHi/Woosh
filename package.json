@@ -27,8 +27,7 @@
       "icon": "assets/icon.ico"
     },
     "mac": {
-      "target": ["zip"],
-      "arch": ["universal"],
+      "target": [{ "target": "zip", "arch": ["x64", "arm64"] }],
       "icon": "assets/icon.icns",
       "category": "public.app-category.utilities"
     },
