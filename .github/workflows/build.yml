@@ -25,6 +25,9 @@ jobs:
         run: npm run build:win
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EP_DRAFT: true
+          EP_PRE_RELEASE: false
+          PUBLISH: never
 
       - name: Upload to Release
         if: github.event_name == 'release'
@@ -65,6 +68,9 @@ jobs:
         run: npm run build:mac
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EP_DRAFT: true
+          EP_PRE_RELEASE: false
+          PUBLISH: never
 
       - name: Upload to Release
         if: github.event_name == 'release'
