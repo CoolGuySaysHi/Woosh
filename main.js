@@ -38,21 +38,33 @@ const BLOCKED_DOMAINS = new Set([
 
 // Per-tab block counters  { tabId: { ads: N, trackers: N } }
 const blockStats = {};
-// Lifetime stats saved to disk
-const STATS_FILE = path.join(__dirname, 'privacy-stats.json');
+// Lifetime stats saved to disk — paths resolved lazily after app is ready
+let STATS_FILE = null;
+let BOOKMARKS_FILE = null;
+
+function getStatsFile() {
+  if (!STATS_FILE) STATS_FILE = path.join(app.getPath('userData'), 'privacy-stats.json');
+  return STATS_FILE;
+}
+
+function getBookmarksFile() {
+  if (!BOOKMARKS_FILE) BOOKMARKS_FILE = path.join(app.getPath('userData'), 'bookmarks.json');
+  return BOOKMARKS_FILE;
+}
 
 function loadStats() {
   try {
-    if (fs.existsSync(STATS_FILE)) return JSON.parse(fs.readFileSync(STATS_FILE, 'utf-8'));
+    const f = getStatsFile();
+    if (fs.existsSync(f)) return JSON.parse(fs.readFileSync(f, 'utf-8'));
   } catch(e) {}
   return { totalAds: 0, totalTrackers: 0, totalBlocked: 0, since: Date.now() };
 }
 
 function saveStats(stats) {
-  try { fs.writeFileSync(STATS_FILE, JSON.stringify(stats, null, 2)); } catch(e) {}
+  try { fs.writeFileSync(getStatsFile(), JSON.stringify(stats, null, 2)); } catch(e) {}
 }
 
-let lifetimeStats = loadStats();
+let lifetimeStats = { totalAds: 0, totalTrackers: 0, totalBlocked: 0, since: Date.now() };
 
 function isDomainBlocked(url) {
   try {
@@ -88,12 +100,12 @@ ipcMain.handle('reset-privacy-stats', () => {
 });
 
 // ─── Bookmarks stored in bookmarks.json next to main.js ───────
-const BOOKMARKS_FILE = path.join(__dirname, 'bookmarks.json');
 
 function loadBookmarks() {
   try {
-    if (fs.existsSync(BOOKMARKS_FILE)) {
-      return JSON.parse(fs.readFileSync(BOOKMARKS_FILE, 'utf-8'));
+    const f = getBookmarksFile();
+    if (fs.existsSync(f)) {
+      return JSON.parse(fs.readFileSync(f, 'utf-8'));
     }
   } catch(e) {}
   return [];
@@ -101,7 +113,7 @@ function loadBookmarks() {
 
 function saveBookmarks(bookmarks) {
   try {
-    fs.writeFileSync(BOOKMARKS_FILE, JSON.stringify(bookmarks, null, 2));
+    fs.writeFileSync(getBookmarksFile(), JSON.stringify(bookmarks, null, 2));
   } catch(e) {}
 }
 
@@ -466,8 +478,10 @@ ipcMain.handle('get-tabs', () => tabs.map(t => ({ id: t.id, url: t.url, title: t
 ipcMain.handle('get-active-tab', () => activeTabId);
 
 app.whenReady().then(() => {
+  // Now safe to use app.getPath — load persisted stats
+  lifetimeStats = loadStats();
+
   // Register Woosh as a handler for http and https
-  // This lets Windows/Mac offer Woosh as a default browser option
   app.setAsDefaultProtocolClient('http');
   app.setAsDefaultProtocolClient('https');
   createWindow();
