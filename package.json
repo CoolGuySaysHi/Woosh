@@ -1,23 +1,58 @@
 {
   "name": "woosh-browser",
-  "version": "1.1.2",
+  "version": "1.0.0",
   "description": "Woosh - Your custom browser",
   "main": "main.js",
-  "author": "Thomas Fairfield",
+  "author": "Thomas",
   "scripts": {
     "start": "electron .",
-    "build:win": "electron-builder --win nsis",
-    "build:mac": "electron-builder --mac dmg",
+    "build:win": "electron-builder --win nsis --x64",
+    "build:mac": "electron-builder --mac --arm64",
     "build": "electron-builder --win nsis"
   },
   "build": {
     "appId": "com.thomas.woosh",
     "productName": "Woosh",
-    "directories": { "output": "dist" },
-    "files": ["**/*", "!node_modules/.cache", "!dist", "!*.log"],
-   "win": { "target": "nsis", "icon": "assets/icon.ico", "publish": null },
-"mac": { "target": "dmg", "icon": "assets/icon.icns", "category": "public.app-category.utilities", "publish": null },
-    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "createDesktopShortcut": true, "createStartMenuShortcut": true, "shortcutName": "Woosh" }
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "**/*",
+      "!node_modules/.cache",
+      "!dist",
+      "!*.log",
+      "!build-mac.sh"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": {
+        "target": "dmg",
+        "arch": ["arm64"]
+      },
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.utilities",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "entitlements": "entitlements.mac.plist",
+      "entitlementsInherit": "entitlements.mac.plist"
+    },
+    "dmg": {
+      "contents": [
+        { "x": 130, "y": 220 },
+        { "x": 410, "y": 220, "type": "link", "path": "/Applications" }
+      ],
+      "window": { "width": 540, "height": 380 }
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Woosh"
+    }
   },
   "devDependencies": {
     "electron": "28.0.0",
