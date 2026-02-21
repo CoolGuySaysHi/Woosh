@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Account</title>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --accent: #8b6cf7; --pink: #f06292; --green: #4caf50;
+      --bg: #13111e; --bg2: #1a1730; --border: rgba(255,255,255,0.08);
+      --text: #e8e0ff; --muted: rgba(232,224,255,0.45);
+      --font: 'Fredoka', sans-serif; --mono: 'DM Mono', monospace;
+    }
+    body {
+      background: var(--bg); color: var(--text); font-family: var(--font);
+      height: 100vh; display: flex; flex-direction: column;
+      border: 1px solid rgba(139,108,247,0.35); border-radius: 12px;
+      overflow: hidden; user-select: none;
+    }
+    #header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 14px; border-bottom: 1px solid var(--border);
+      flex-shrink: 0; -webkit-app-region: drag;
+    }
+    #title { font-size: 14px; font-weight: 600; }
+    #close-btn {
+      -webkit-app-region: no-drag; background: transparent; border: none;
+      color: var(--muted); cursor: pointer; font-size: 15px; padding: 2px 6px; border-radius: 4px;
+    }
+    #close-btn:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+
+    /* Signed out view */
+    #signed-out { padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 14px; flex: 1; }
+    .big-icon { font-size: 48px; margin-bottom: 4px; }
+    .signed-out-title { font-size: 17px; font-weight: 700; }
+    .signed-out-sub { font-size: 12px; color: var(--muted); text-align: center; line-height: 1.5; }
+    .signin-btn {
+      width: 100%; padding: 11px; border: none; border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), var(--pink));
+      color: white; font-family: var(--font); font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: opacity 0.15s;
+    }
+    .signin-btn:hover { opacity: 0.85; }
+    .divider { width: 100%; height: 1px; background: var(--border); }
+    .or { font-size: 11px; color: var(--muted); }
+    .email-form { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+    .email-form input {
+      width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border);
+      border-radius: 8px; padding: 8px 10px; color: var(--text);
+      font-family: var(--mono); font-size: 13px; outline: none;
+    }
+    .email-form input:focus { border-color: var(--accent); }
+    .email-form input::placeholder { color: var(--muted); }
+    .email-btns { display: flex; gap: 8px; }
+    .email-btns button {
+      flex: 1; padding: 8px; border: none; border-radius: 8px;
+      font-family: var(--font); font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    #email-signin-btn { background: var(--accent); color: white; }
+    #email-signup-btn { background: rgba(255,255,255,0.08); color: var(--text); }
+    #auth-error { font-size: 12px; color: #f55d5d; text-align: center; display: none; }
+
+    /* Signed in view */
+    #signed-in { display: none; flex-direction: column; flex: 1; }
+    .user-card {
+      display: flex; align-items: center; gap: 12px;
+      padding: 16px; border-bottom: 1px solid var(--border);
+    }
+    .avatar {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--pink));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 700; color: white; flex-shrink: 0; overflow: hidden;
+    }
+    .avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+    .user-info { flex: 1; min-width: 0; }
+    .user-name { font-size: 14px; font-weight: 600; }
+    .user-email { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+    .sync-status { display: flex; align-items: center; gap: 6px; padding: 10px 16px; font-size: 12px; border-bottom: 1px solid var(--border); }
+    .sync-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+    .sync-dot.syncing { background: var(--accent); animation: pulse 1s ease-in-out infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .sync-text { color: var(--muted); flex: 1; }
+    .sync-btn {
+      background: rgba(139,108,247,0.15); border: 1px solid rgba(139,108,247,0.3);
+      border-radius: 6px; color: var(--accent); font-family: var(--font);
+      font-size: 12px; padding: 4px 10px; cursor: pointer;
+    }
+    .sync-btn:hover { background: rgba(139,108,247,0.25); }
+    .sync-items { padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+    .sync-item { display: flex; align-items: center; justify-content: space-between; }
+    .sync-item-label { font-size: 13px; color: var(--muted); }
+    .sync-item-val { font-size: 12px; font-family: var(--mono); color: var(--text); }
+    .actions { margin-top: auto; padding: 12px 16px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+    .action-btn {
+      width: 100%; padding: 9px; border-radius: 8px; border: 1px solid var(--border);
+      background: transparent; color: var(--muted); font-family: var(--font);
+      font-size: 13px; cursor: pointer; text-align: left; transition: all 0.15s;
+    }
+    .action-btn:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+    .action-btn.danger:hover { border-color: rgba(245,93,93,0.4); color: #f55d5d; }
+    #loading-overlay {
+      position: absolute; inset: 0; background: rgba(19,17,30,0.8);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; color: var(--muted); border-radius: 12px;
+    }
+    #loading-overlay.hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div id="header">
+    <span id="title">👤 Account & Sync</span>
+    <button id="close-btn">✕</button>
+  </div>
+
+  <!-- Signed out -->
+  <div id="signed-out">
+    <div class="big-icon">☁️</div>
+    <div class="signed-out-title">Sync your browser</div>
+    <div class="signed-out-sub">Sign in to sync history, bookmarks,<br/>passwords and settings across devices.</div>
+    <button class="signin-btn" id="google-signin-btn" style="display:none">Continue with Google</button>
+    <div style="display:none;align-items:center;gap:10px;width:100%">
+      <div class="divider"></div><span class="or">or</span><div class="divider"></div>
+    </div>
+    <div class="email-form">
+      <input type="email" id="email-input" placeholder="Email address"/>
+      <input type="password" id="password-input" placeholder="Password"/>
+      <div class="email-btns">
+        <button id="email-signin-btn">Sign in</button>
+        <button id="email-signup-btn">Sign up</button>
+      </div>
+      <div id="auth-error"></div>
+    </div>
+  </div>
+
+  <!-- Signed in -->
+  <div id="signed-in">
+    <div class="user-card">
+      <div class="avatar" id="user-avatar"></div>
+      <div class="user-info">
+        <div class="user-name" id="user-name">User</div>
+        <div class="user-email" id="user-email"></div>
+      </div>
+    </div>
+    <div class="sync-status">
+      <div class="sync-dot" id="sync-dot"></div>
+      <span class="sync-text" id="sync-text">Synced</span>
+      <button class="sync-btn" id="sync-now-btn">Sync now</button>
+    </div>
+    <div class="sync-items">
+      <div class="sync-item"><span class="sync-item-label">📖 History</span><span class="sync-item-val" id="stat-history">–</span></div>
+      <div class="sync-item"><span class="sync-item-label">🔖 Bookmarks</span><span class="sync-item-val" id="stat-bookmarks">–</span></div>
+      <div class="sync-item"><span class="sync-item-label">🔑 Passwords</span><span class="sync-item-val" id="stat-passwords">–</span></div>
+      <div class="sync-item"><span class="sync-item-label">🛡️ Settings</span><span class="sync-item-val" id="stat-settings">synced</span></div>
+    </div>
+    <div class="actions">
+      <button class="action-btn" id="history-btn">📖 View history</button>
+      <button class="action-btn danger" id="signout-btn">Sign out</button>
+    </div>
+  </div>
+
+  <div id="loading-overlay" class="hidden">Signing in…</div>
+
+  <script>
+    const ipc = window.ipc;
+
+    document.getElementById('close-btn').addEventListener('click', () => ipc.send('close-profile-popup'));
+
+    // ── Firebase config (injected from main) ──────────────────
+    // Loaded via ipc
+    let firebaseConfig = null;
+    let currentUser = null;
+
+    async function init() {
+      const state = await ipc.invoke('get-sync-state');
+      firebaseConfig = state.config;
+      if (state.user) {
+        showSignedIn(state.user, state.stats);
+      }
+    }
+
+    // ── Auth ──────────────────────────────────────────────────
+    document.getElementById('google-signin-btn').addEventListener('click', async () => {
+      setLoading(true);
+      const result = await ipc.invoke('sync-signin-google');
+      setLoading(false);
+      if (result.error) showError(result.error);
+      else showSignedIn(result.user, result.stats);
+    });
+
+    document.getElementById('email-signin-btn').addEventListener('click', async () => {
+      const email = document.getElementById('email-input').value.trim();
+      const password = document.getElementById('password-input').value;
+      if (!email || !password) return;
+      setLoading(true);
+      const result = await ipc.invoke('sync-signin-email', { email, password });
+      setLoading(false);
+      if (result.error) showError(result.error);
+      else showSignedIn(result.user, result.stats);
+    });
+
+    document.getElementById('email-signup-btn').addEventListener('click', async () => {
+      const email = document.getElementById('email-input').value.trim();
+      const password = document.getElementById('password-input').value;
+      if (!email || !password) return;
+      setLoading(true);
+      const result = await ipc.invoke('sync-signup-email', { email, password });
+      setLoading(false);
+      if (result.error) showError(result.error);
+      else showSignedIn(result.user, result.stats);
+    });
+
+    document.getElementById('signout-btn').addEventListener('click', async () => {
+      await ipc.invoke('sync-signout');
+      showSignedOut();
+    });
+
+    document.getElementById('sync-now-btn').addEventListener('click', async () => {
+      setSyncing(true);
+      const stats = await ipc.invoke('sync-now');
+      setSyncing(false);
+      updateStats(stats);
+    });
+
+    document.getElementById('history-btn').addEventListener('click', () => {
+      ipc.send('navigate', 'woosh://history');
+      ipc.send('close-profile-popup');
+    });
+
+    // ── UI helpers ─────────────────────────────────────────────
+    function showSignedIn(user, stats) {
+      document.getElementById('signed-out').style.display = 'none';
+      document.getElementById('signed-in').style.display = 'flex';
+      document.getElementById('user-name').textContent = user.displayName || user.email.split('@')[0];
+      document.getElementById('user-email').textContent = user.email;
+      const avatar = document.getElementById('user-avatar');
+      if (user.photoURL) {
+        avatar.innerHTML = `<img src="${user.photoURL}" />`;
+      } else {
+        avatar.textContent = (user.displayName || user.email)[0].toUpperCase();
+      }
+      if (stats) updateStats(stats);
+    }
+
+    function showSignedOut() {
+      document.getElementById('signed-out').style.display = 'flex';
+      document.getElementById('signed-in').style.display = 'none';
+    }
+
+    function updateStats(stats) {
+      if (!stats) return;
+      document.getElementById('stat-history').textContent = stats.history ? `${stats.history} entries` : '–';
+      document.getElementById('stat-bookmarks').textContent = stats.bookmarks ? `${stats.bookmarks} saved` : '–';
+      document.getElementById('stat-passwords').textContent = stats.passwords ? `${stats.passwords} saved` : '–';
+      document.getElementById('sync-text').textContent = stats.lastSync ? `Last synced ${timeAgo(stats.lastSync)}` : 'Synced';
+    }
+
+    function setSyncing(on) {
+      document.getElementById('sync-dot').className = 'sync-dot' + (on ? ' syncing' : '');
+      document.getElementById('sync-text').textContent = on ? 'Syncing…' : 'Synced';
+    }
+
+    function setLoading(on) {
+      document.getElementById('loading-overlay').classList.toggle('hidden', !on);
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('auth-error');
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+
+    function timeAgo(ts) {
+      const s = Math.floor((Date.now() - ts) / 1000);
+      if (s < 60) return 'just now';
+      if (s < 3600) return `${Math.floor(s/60)}m ago`;
+      if (s < 86400) return `${Math.floor(s/3600)}h ago`;
+      return `${Math.floor(s/86400)}d ago`;
+    }
+
+    init();
+  </script>
+</body>
+</html>

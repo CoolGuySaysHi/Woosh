@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Protection</title>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --accent: #8b6cf7;
+      --pink: #f06292;
+      --green: #4caf50;
+      --red: #f55d5d;
+      --bg: #13111e;
+      --border: rgba(255,255,255,0.08);
+      --text: #e8e0ff;
+      --muted: rgba(232,224,255,0.45);
+      --font: 'Fredoka', sans-serif;
+      --mono: 'DM Mono', monospace;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid rgba(139,108,247,0.35);
+      border-radius: 12px;
+      overflow: hidden;
+      user-select: none;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--border);
+      -webkit-app-region: drag;
+      flex-shrink: 0;
+    }
+    .header-title { font-size: 14px; font-weight: 600; }
+    .close {
+      -webkit-app-region: no-drag;
+      background: transparent; border: none;
+      color: var(--muted); cursor: pointer;
+      font-size: 15px; padding: 2px 6px; border-radius: 4px;
+    }
+    .close:hover { background: rgba(255,255,255,0.08); color: var(--text); }
+
+    .section {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .label { font-size: 13px; }
+    .sublabel { font-size: 11px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
+
+    .toggle {
+      font-family: var(--mono); font-size: 11px; font-weight: 600;
+      padding: 5px 12px; border-radius: 6px; cursor: pointer;
+      border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(255,255,255,0.05); color: var(--muted);
+      transition: all 0.15s; flex-shrink: 0;
+    }
+    .toggle.on { background: linear-gradient(135deg, #4caf50, #2e7d32); border-color: #4caf50; color: white; }
+    .toggle.allow { background: linear-gradient(135deg, var(--pink), #c2185b); border-color: var(--pink); color: white; }
+
+    .section-title {
+      font-size: 10px; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.06em;
+      margin-bottom: 6px;
+    }
+    .whitelist-item {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 3px 0; font-family: var(--mono); font-size: 12px;
+    }
+    .remove-btn {
+      background: transparent; border: none; color: var(--muted);
+      cursor: pointer; font-size: 12px; padding: 1px 5px; border-radius: 3px;
+    }
+    .remove-btn:hover { color: var(--red); }
+    .empty { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+
+    /* Manual save form */
+    .manual-form { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+    .manual-form input {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 6px 10px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px;
+      outline: none;
+      width: 100%;
+    }
+    .manual-form input:focus { border-color: var(--accent); }
+    .save-btn {
+      background: linear-gradient(135deg, var(--accent), var(--pink));
+      border: none; border-radius: 7px;
+      color: white; font-family: var(--font);
+      font-size: 13px; font-weight: 600;
+      padding: 7px; cursor: pointer;
+      width: 100%; transition: opacity 0.15s;
+    }
+    .save-btn:hover { opacity: 0.85; }
+    .saved-msg { font-size: 12px; color: var(--green); text-align: center; display: none; }
+
+    .stats-btn {
+      width: 100%; background: transparent; border: none;
+      color: var(--accent); font-family: var(--font); font-size: 13px;
+      padding: 10px 14px; cursor: pointer; text-align: left;
+      transition: background 0.1s; flex-shrink: 0;
+    }
+    .stats-btn:hover { background: rgba(139,108,247,0.1); }
+
+    #whitelist-section { max-height: 80px; overflow-y: auto; }
+    #whitelist-section::-webkit-scrollbar { width: 3px; }
+    #whitelist-section::-webkit-scrollbar-thumb { background: rgba(139,108,247,0.3); border-radius: 2px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <span class="header-title">🛡 Protection</span>
+    <button class="close" id="close-btn">✕</button>
+  </div>
+
+  <!-- Ad blocker global toggle -->
+  <div class="section">
+    <div class="row">
+      <div>
+        <div class="label">Ad & Tracker Blocker</div>
+        <div class="sublabel" id="block-status">Loading...</div>
+      </div>
+      <button class="toggle" id="toggle-btn">ON</button>
+    </div>
+  </div>
+
+  <!-- Current site whitelist toggle -->
+  <div class="section">
+    <div class="row">
+      <div>
+        <div class="label">This site</div>
+        <div class="sublabel" id="current-domain">—</div>
+      </div>
+      <button class="toggle" id="site-btn">Allow ads</button>
+    </div>
+  </div>
+
+  <!-- Whitelist -->
+  <div class="section">
+    <div class="section-title">Whitelisted sites</div>
+    <div id="whitelist-section">
+      <div class="empty" id="whitelist-empty">No sites whitelisted</div>
+    </div>
+  </div>
+
+  <button class="stats-btn" id="stats-btn">View privacy stats →</button>
+
+  <script>
+    const ipc = window.ipc;
+    const params = new URLSearchParams(window.location.search);
+    const domain = params.get('domain') || '';
+    let state = {
+      enabled: params.get('enabled') !== 'false',
+      whitelist: params.get('whitelist') ? params.get('whitelist').split(',').filter(Boolean) : []
+    };
+
+    async function load() {
+      // State already loaded from query string — just render
+      render();
+    }
+
+    function render() {
+      const toggleBtn = document.getElementById('toggle-btn');
+      const siteBtn   = document.getElementById('site-btn');
+      const domainEl  = document.getElementById('current-domain');
+      const statusEl  = document.getElementById('block-status');
+
+      toggleBtn.textContent = state.enabled ? 'ON' : 'OFF';
+      toggleBtn.className = 'toggle' + (state.enabled ? ' on' : '');
+      statusEl.textContent = state.enabled ? 'Blocking ads & trackers' : 'Disabled';
+
+      domainEl.textContent = domain || 'No site loaded';
+      const isWhitelisted = domain && state.whitelist.includes(domain);
+      siteBtn.textContent = isWhitelisted ? 'Block ads ✓' : 'Allow ads';
+      siteBtn.className = 'toggle' + (isWhitelisted ? ' allow' : '');
+
+      // Whitelist
+      const list  = document.getElementById('whitelist-section');
+      const empty = document.getElementById('whitelist-empty');
+      list.innerHTML = '';
+      if (state.whitelist.length === 0) {
+        list.appendChild(empty);
+        empty.style.display = 'block';
+      } else {
+        empty.style.display = 'none';
+        state.whitelist.forEach(d => {
+          const row = document.createElement('div');
+          row.className = 'whitelist-item';
+          row.innerHTML = `<span>${d}</span><button class="remove-btn" data-d="${d}">✕</button>`;
+          row.querySelector('.remove-btn').addEventListener('click', async () => {
+            state = await ipc.invoke('remove-from-whitelist', d);
+            render();
+          });
+          list.appendChild(row);
+        });
+      }
+    }
+
+    document.getElementById('toggle-btn').addEventListener('click', async () => {
+      state = await ipc.invoke('toggle-adblocker');
+      render();
+    });
+
+    document.getElementById('site-btn').addEventListener('click', async () => {
+      if (!domain) return;
+      const isWhitelisted = state.whitelist.includes(domain);
+      state = await ipc.invoke(isWhitelisted ? 'remove-from-whitelist' : 'add-to-whitelist', domain);
+      render();
+    });
+
+    document.getElementById('stats-btn').addEventListener('click', () => {
+      ipc.send('navigate', 'woosh://privacy');
+      ipc.send('close-shield-popup');
+    });
+
+    document.getElementById('close-btn').addEventListener('click', () => ipc.send('close-shield-popup'));
+
+    load();
+  </script>
+</body>
+</html>

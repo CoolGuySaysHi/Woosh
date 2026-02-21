@@ -1,5 +1,6 @@
 // renderer.js — Woosh Browser UI Logic
 
+// ipc is set by preload.js — access via getter so it's always current
 const ipc = window.ipc;
 
 // Elements
@@ -249,7 +250,10 @@ btnHome.addEventListener('click', () => {
 });
 
 btnNewTab.addEventListener('click', () => ipc.send('new-tab'));
-btnShield.addEventListener('click', () => ipc.send('navigate', 'woosh://privacy'));
+btnShield.addEventListener('click', (e) => {
+  e.stopPropagation();
+  ipc.send('open-shield-popup');
+});
 btnMinimize.addEventListener('click', () => ipc.send('minimize-window'));
 btnMaximize.addEventListener('click', () => ipc.send('maximize-window'));
 btnClose.addEventListener('click', () => ipc.send('close-window'));
@@ -312,6 +316,18 @@ ipc.on('url-changed', (e, url) => {
 ipc.on('page-loading', (e, isLoading) => {
   spinner.classList.toggle('hidden', !isLoading);
   btnReload.classList.toggle('loading', isLoading);
+  // Check for PWA support after page finishes loading
+  if (!isLoading) {
+    const pwaBtn = document.getElementById('pwa-install-btn');
+    pwaBtn.classList.add('hidden');
+    setTimeout(async () => {
+      const pwa = await ipc.invoke('check-pwa');
+      if (pwa) {
+        pwaBtn.classList.remove('hidden');
+        pwaBtn.onclick = () => ipc.send('install-pwa', pwa);
+      }
+    }, 500);
+  }
 });
 
 ipc.on('blocked-update', (e, stats) => {
@@ -355,6 +371,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   });
   if (activeId) setActiveTab(activeId);
   renderBookmarks();
+  initPasswordManager();
+  loadPasswordList();
 });
 
 // ─── Keyboard shortcuts ───────────────────────────────────────
@@ -383,3 +401,308 @@ document.addEventListener('keydown', (e) => {
   if (e.altKey && e.key === 'ArrowLeft') ipc.send('go-back');
   if (e.altKey && e.key === 'ArrowRight') ipc.send('go-forward');
 });
+
+// ─── Password Manager ─────────────────────────────────────────
+let allPasswords = [];
+let pendingSave = null;
+
+async function loadPasswordList() {
+  allPasswords = await ipc.invoke('get-passwords');
+  const btnPasswords = document.getElementById('btn-passwords');
+  if (btnPasswords) btnPasswords.classList.toggle('has-passwords', allPasswords.length > 0);
+  renderPasswordList(allPasswords);
+}
+
+function renderPasswordList(passwords) {
+  const passwordList  = document.getElementById('password-list');
+  const passwordEmpty = document.getElementById('password-empty');
+  if (!passwordList) return;
+  passwordList.innerHTML = '';
+
+  if (passwords.length === 0) {
+    passwordEmpty.style.display = 'block';
+    return;
+  }
+  passwordEmpty.style.display = 'none';
+
+  passwords.forEach(p => {
+    const item = document.createElement('div');
+    item.className = 'password-item';
+
+    const fav = document.createElement('div');
+    fav.className = 'password-favicon';
+    fav.textContent = p.domain[0].toUpperCase();
+    const img = new Image();
+    img.onload = () => { fav.innerHTML = ''; img.style.cssText = 'width:100%;height:100%;object-fit:cover'; fav.appendChild(img); };
+    try { img.src = 'https://' + p.domain + '/favicon.ico'; } catch(e) {}
+
+    const info = document.createElement('div');
+    info.className = 'password-info';
+    info.innerHTML = `<div class="password-domain">${p.domain}</div><div class="password-username">${p.username}</div>`;
+
+    const actions = document.createElement('div');
+    actions.className = 'password-actions';
+
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'pw-btn';
+    copyBtn.textContent = '📋';
+    copyBtn.title = 'Copy password';
+    copyBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(p.password);
+      copyBtn.textContent = '✓';
+      setTimeout(() => { copyBtn.textContent = '📋'; }, 1500);
+    });
+
+    const fillBtn = document.createElement('button');
+    fillBtn.className = 'pw-btn';
+    fillBtn.textContent = 'Fill';
+    fillBtn.title = 'Autofill on current page';
+    fillBtn.addEventListener('click', () => {
+      ipc.send('autofill-password', { username: p.username, password: p.password });
+      document.getElementById('password-popup').classList.add('hidden');
+    });
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'pw-btn delete';
+    delBtn.textContent = '🗑';
+    delBtn.title = 'Delete';
+    delBtn.addEventListener('click', async () => {
+      await ipc.invoke('delete-password', { domain: p.domain, username: p.username });
+      loadPasswordList();
+    });
+
+    actions.appendChild(copyBtn);
+    actions.appendChild(fillBtn);
+    actions.appendChild(delBtn);
+    item.appendChild(fav);
+    item.appendChild(info);
+    item.appendChild(actions);
+    passwordList.appendChild(item);
+  });
+}
+
+function initPasswordManager() {
+  const btnPasswords       = document.getElementById('btn-passwords');
+  const passwordPopup      = document.getElementById('password-popup');
+  const passwordPopupClose = document.getElementById('password-popup-close');
+  const passwordSearch     = document.getElementById('password-search');
+  console.log('initPasswordManager called, btnPasswords:', btnPasswords, 'popup:', passwordPopup);
+  if (!btnPasswords) { console.log('btn-passwords not found!'); return; }
+
+  // Toggle popup window
+  btnPasswords.addEventListener('click', (e) => {
+    e.stopPropagation();
+    ipc.send('open-password-popup');
+  });
+
+  passwordPopupClose.addEventListener('click', () => passwordPopup.classList.add('hidden'));
+
+  document.addEventListener('click', (e) => {
+    if (!passwordPopup.contains(e.target) && e.target !== btnPasswords) {
+      passwordPopup.classList.add('hidden');
+    }
+  });
+
+  // Search filter
+  passwordSearch.addEventListener('input', () => {
+    const q = passwordSearch.value.toLowerCase();
+    renderPasswordList(q ? allPasswords.filter(p => p.domain.includes(q) || p.username.includes(q)) : allPasswords);
+  });
+}
+
+// Save password banner
+ipc.on('offer-save-password', (e, { domain, username, password }) => {
+  pendingSave = { domain, username, password };
+  const saveBanner = document.getElementById('save-password-banner');
+  if (!saveBanner) return;
+  saveBanner.innerHTML = `
+    <span class="banner-icon">🔑</span>
+    <span class="banner-text">Save password for <strong>${domain}</strong>?</span>
+    <button class="banner-btn" id="banner-save">Save</button>
+    <button class="banner-btn dismiss" id="banner-dismiss">Not now</button>
+  `;
+  saveBanner.classList.remove('hidden');
+  document.getElementById('banner-save').addEventListener('click', async () => {
+    if (pendingSave) { await ipc.invoke('save-password', pendingSave); loadPasswordList(); }
+    saveBanner.classList.add('hidden');
+    pendingSave = null;
+  });
+  document.getElementById('banner-dismiss').addEventListener('click', () => {
+    saveBanner.classList.add('hidden');
+    pendingSave = null;
+  });
+  setTimeout(() => saveBanner.classList.add('hidden'), 15000);
+});
+
+
+// ─── Shield / Ad Blocker Popup ────────────────────────────────
+let adBlockState = { enabled: true, whitelist: [] };
+
+async function refreshShieldPopup() {
+  adBlockState = await ipc.invoke('get-adblocker-state');
+  const shieldToggleBtn     = document.getElementById('shield-toggle-btn');
+  const shieldWhitelistBtn  = document.getElementById('shield-whitelist-btn');
+  const shieldSiteName      = document.getElementById('shield-site-name');
+  const shieldWhitelistList = document.getElementById('shield-whitelist-list');
+  if (!shieldToggleBtn) return;
+
+  const tab = tabsData[activeTabId];
+  let domain = '';
+  try { domain = new URL(tab ? tab.url : '').hostname.replace('www.', ''); } catch(e) {}
+
+  shieldToggleBtn.textContent = adBlockState.enabled ? 'ON' : 'OFF';
+  shieldToggleBtn.className = 'toggle-btn' + (adBlockState.enabled ? ' on' : '');
+
+  const isWhitelisted = domain && adBlockState.whitelist.includes(domain);
+  if (shieldSiteName) shieldSiteName.textContent = domain || 'This site';
+  shieldWhitelistBtn.textContent = isWhitelisted ? 'Blocked ✓' : 'Allow ads';
+  shieldWhitelistBtn.className = 'toggle-btn' + (isWhitelisted ? ' whitelisted' : '');
+  shieldWhitelistBtn.dataset.domain = domain;
+
+  shieldWhitelistList.innerHTML = '';
+  if (adBlockState.whitelist.length === 0) {
+    shieldWhitelistList.innerHTML = '<span style="font-size:12px;color:var(--text-muted);font-family:var(--font-ui)">No sites whitelisted</span>';
+  } else {
+    adBlockState.whitelist.forEach(d => {
+      const row = document.createElement('div');
+      row.className = 'whitelist-item';
+      row.innerHTML = `<span>${d}</span><button class="whitelist-remove" data-domain="${d}">✕</button>`;
+      row.querySelector('.whitelist-remove').addEventListener('click', () => {
+        ipc.send('remove-from-whitelist', d);
+        setTimeout(refreshShieldPopup, 100);
+      });
+      shieldWhitelistList.appendChild(row);
+    });
+  }
+
+  shieldToggleBtn.onclick = () => { ipc.send('toggle-adblocker'); setTimeout(refreshShieldPopup, 100); };
+  shieldWhitelistBtn.onclick = () => {
+    const d = shieldWhitelistBtn.dataset.domain;
+    if (!d) return;
+    ipc.send(adBlockState.whitelist.includes(d) ? 'remove-from-whitelist' : 'add-to-whitelist', d);
+    setTimeout(refreshShieldPopup, 100);
+  };
+
+  const statsBtn = document.getElementById('shield-stats-btn');
+  if (statsBtn) statsBtn.onclick = () => {
+    ipc.send('navigate', 'woosh://privacy');
+    document.getElementById('shield-popup').classList.add('hidden');
+  };
+
+  const closeBtn = document.getElementById('shield-popup-close');
+  if (closeBtn) closeBtn.onclick = () => document.getElementById('shield-popup').classList.add('hidden');
+}
+
+document.addEventListener('click', (e) => {
+  const popup = document.getElementById('shield-popup');
+  if (popup && !popup.contains(e.target) && e.target !== btnShield && !btnShield.contains(e.target)) {
+    popup.classList.add('hidden');
+  }
+});
+
+ipc.on('adblocker-state', (e, state) => { adBlockState = state; });
+
+// ─── Fullscreen ───────────────────────────────────────────────
+ipc.on('fullscreen-change', (e, isFullscreen) => {
+  document.body.classList.toggle('fullscreen', isFullscreen);
+});
+
+// ── PWA install toast ─────────────────────────────────────────
+ipc.on('pwa-installed', (e, name) => {
+  const toast = document.createElement('div');
+  toast.style.cssText = `
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: linear-gradient(135deg, #8b6cf7, #f06292);
+    color: white; padding: 10px 20px; border-radius: 20px;
+    font-family: var(--font-ui); font-size: 13px; font-weight: 600;
+    z-index: 99999; box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    animation: slideUp 0.2s ease;
+  `;
+  toast.textContent = `✓ ${name} installed!`;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+});
+
+// ─── Permission requests ───────────────────────────────────────
+ipc.on('open-permission-popup', (e, data) => {
+  ipc.send('open-permission-popup', data);
+});
+
+// ─── Profile / Sync button ─────────────────────────────────────
+const btnProfile = document.getElementById('btn-profile');
+if (btnProfile) {
+  btnProfile.addEventListener('click', () => ipc.send('open-profile-popup'));
+}
+ipc.on('sync-state-changed', (e, { signedIn }) => {
+  const dot = document.getElementById('profile-sync-dot');
+  if (dot) dot.classList.toggle('visible', signedIn);
+});
+
+// ─── Download bar ──────────────────────────────────────────────
+const downloadBar   = document.getElementById('download-bar');
+const downloadItems = document.getElementById('download-bar-items');
+const downloads     = {};
+
+document.getElementById('download-bar-close')?.addEventListener('click', () => {
+  downloadBar.classList.add('hidden');
+  downloadItems.innerHTML = '';
+});
+
+ipc.on('download-started', (e, { id, filename, totalBytes, savePath }) => {
+  downloads[id] = { filename, totalBytes, savePath };
+  downloadBar.classList.remove('hidden');
+  const item = document.createElement('div');
+  item.className = 'dl-item';
+  item.id = `dl-${id}`;
+  item.innerHTML = `
+    <div class="dl-icon">${fileIcon(filename)}</div>
+    <div class="dl-info">
+      <div class="dl-name">${filename}</div>
+      <div class="dl-status" id="dl-status-${id}">Starting…</div>
+      <div class="dl-progress-wrap"><div class="dl-progress-bar" id="dl-bar-${id}" style="width:0%"></div></div>
+    </div>
+    <button class="dl-action" id="dl-action-${id}">Cancel</button>`;
+  downloadItems.appendChild(item);
+});
+
+ipc.on('download-progress', (e, { id, received, total }) => {
+  const pct    = total > 0 ? Math.round((received / total) * 100) : 0;
+  const bar    = document.getElementById(`dl-bar-${id}`);
+  const status = document.getElementById(`dl-status-${id}`);
+  if (bar) bar.style.width = pct + '%';
+  if (status) status.textContent = total > 0
+    ? `${pct}% · ${formatBytes(received)} / ${formatBytes(total)}`
+    : formatBytes(received);
+});
+
+ipc.on('download-done', (e, { id, state, savePath }) => {
+  const status = document.getElementById(`dl-status-${id}`);
+  const bar    = document.getElementById(`dl-bar-${id}`);
+  const action = document.getElementById(`dl-action-${id}`);
+  if (state === 'completed') {
+    if (bar) bar.style.width = '100%';
+    if (status) status.textContent = 'Done ✓';
+    if (action) { action.textContent = 'Show'; action.onclick = () => ipc.send('show-in-folder', savePath); }
+  } else {
+    if (status) status.textContent = state === 'cancelled' ? 'Cancelled' : 'Failed';
+    if (bar) bar.style.background = '#f55d5d';
+    if (action) action.style.display = 'none';
+  }
+});
+
+function fileIcon(name) {
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  if (['mp4','mkv','avi','mov','webm'].includes(ext)) return '🎬';
+  if (['mp3','wav','flac','ogg','aac'].includes(ext)) return '🎵';
+  if (['jpg','jpeg','png','gif','webp','svg'].includes(ext)) return '🖼️';
+  if (['zip','tar','gz','rar','7z'].includes(ext)) return '🗜️';
+  if (['pdf'].includes(ext)) return '📄';
+  if (['exe','msi','dmg','deb'].includes(ext)) return '⚙️';
+  return '📥';
+}
+
+function formatBytes(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+  return (b / 1048576).toFixed(1) + ' MB';
+}

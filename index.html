@@ -65,10 +65,18 @@
         </svg>
       </div>
       <input type="text" id="addressbar" placeholder="Search Woosh or enter a URL..." spellcheck="false" autocomplete="off"/>
+      <button id="pwa-install-btn" class="hidden" title="Install app">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+      </button>
       <div id="loading-spinner" class="hidden"><div class="spinner"></div></div>
     </div>
 
     <!-- Bookmark star button -->
+    <div id="toolbar-right">
     <button class="nav-btn" id="btn-bookmark" title="Bookmark this page">
       <svg id="bookmark-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
@@ -83,6 +91,38 @@
       <span id="shield-count"></span>
     </button>
 
+    <!-- Password manager button -->
+    <button class="nav-btn" id="btn-passwords" title="Saved passwords">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        <circle cx="12" cy="16" r="1" fill="currentColor"/>
+      </svg>
+    </button>
+
+    <!-- Profile / Sync button -->
+    <button class="nav-btn" id="btn-profile" title="Account & Sync">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+        <circle cx="12" cy="7" r="4"/>
+      </svg>
+      <span id="profile-sync-dot"></span>
+    </button>
+    </div><!-- end toolbar-right -->
+
+  </div><!-- end toolbar -->
+  <div id="password-popup" class="hidden">
+    <div id="password-popup-header">
+      <span id="password-popup-title">🔑 Passwords</span>
+      <button id="password-popup-close">✕</button>
+    </div>
+    <div id="password-popup-body">
+      <div id="password-search-wrap">
+        <input type="text" id="password-search" placeholder="Search passwords..." autocomplete="off"/>
+      </div>
+      <div id="password-list"></div>
+      <div id="password-empty">No saved passwords yet.<br/>Woosh will offer to save them when you log in.</div>
+    </div>
   </div>
 
   <!-- BOOKMARKS BAR -->
@@ -94,6 +134,46 @@
   <!-- RIGHT-CLICK CONTEXT MENU for bookmarks -->
   <div id="bookmark-context-menu">
     <button id="ctx-remove">🗑 Remove bookmark</button>
+  </div>
+
+  <!-- SHIELD / AD BLOCKER POPUP -->
+  <div id="shield-popup" class="hidden">
+    <div id="shield-popup-header">
+      <span>🛡 Protection</span>
+      <button id="shield-popup-close">✕</button>
+    </div>
+    <div id="shield-toggle-row">
+      <span>Ad & Tracker Blocker</span>
+      <button id="shield-toggle-btn" class="toggle-btn">ON</button>
+    </div>
+    <div id="shield-site-row">
+      <span id="shield-site-name">This site</span>
+      <button id="shield-whitelist-btn" class="toggle-btn">Allow ads</button>
+    </div>
+    <div id="shield-whitelist-section">
+      <div class="shield-section-title">Whitelisted sites</div>
+      <div id="shield-whitelist-list"></div>
+    </div>
+    <button id="shield-stats-btn">View privacy stats →</button>
+  </div>
+
+  <!-- SAVE PASSWORD BANNER -->
+  <div id="save-password-banner" class="hidden"></div>
+
+  <!-- DOWNLOAD BAR -->
+  <div id="download-bar" class="hidden">
+    <div id="download-bar-items"></div>
+    <button id="download-bar-close">✕</button>
+  </div>
+
+  <!-- PERMISSION DIALOG -->
+  <div id="permission-dialog" class="hidden">
+    <div id="permission-icon"></div>
+    <div id="permission-text"></div>
+    <div id="permission-buttons">
+      <button id="permission-allow">Allow</button>
+      <button id="permission-deny">Deny</button>
+    </div>
   </div>
 
   <script src="renderer.js"></script>

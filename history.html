@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>History</title>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    :root { --accent:#8b6cf7; --pink:#f06292; --bg:#0d0b1a; --bg2:#13111e; --border:rgba(255,255,255,0.08); --text:#e8e0ff; --muted:rgba(232,224,255,0.45); --font:'Fredoka',sans-serif; --mono:'DM Mono',monospace; }
+    body { background:var(--bg); color:var(--text); font-family:var(--font); min-height:100vh; padding:40px 0; }
+    .container { max-width:760px; margin:0 auto; padding:0 24px; }
+    h1 { font-size:28px; font-weight:700; margin-bottom:6px; }
+    .subtitle { color:var(--muted); font-size:14px; margin-bottom:24px; }
+    .toolbar { display:flex; gap:12px; align-items:center; margin-bottom:28px; }
+    #search { flex:1; background:rgba(255,255,255,0.05); border:1px solid var(--border); border-radius:10px; padding:10px 14px; color:var(--text); font-family:var(--font); font-size:14px; outline:none; }
+    #search:focus { border-color:var(--accent); }
+    .clear-btn { background:rgba(245,93,93,0.12); border:1px solid rgba(245,93,93,0.25); border-radius:8px; color:#f55d5d; font-family:var(--font); font-size:13px; padding:8px 16px; cursor:pointer; }
+    .clear-btn:hover { background:rgba(245,93,93,0.2); }
+    .day-group { margin-bottom:28px; }
+    .day-label { font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:10px; padding-bottom:6px; border-bottom:1px solid var(--border); }
+    .hist-item { display:flex; align-items:center; gap:12px; padding:9px 12px; border-radius:10px; cursor:pointer; transition:background 0.1s; }
+    .hist-item:hover { background:rgba(255,255,255,0.05); }
+    .fav { width:24px; height:24px; border-radius:5px; background:linear-gradient(135deg,var(--accent),var(--pink)); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; color:white; flex-shrink:0; overflow:hidden; }
+    .fav img { width:100%; height:100%; object-fit:cover; }
+    .info { flex:1; min-width:0; }
+    .h-title { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .h-url { font-size:11px; color:var(--muted); font-family:var(--mono); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .h-time { font-size:11px; color:var(--muted); font-family:var(--mono); flex-shrink:0; }
+    .empty { text-align:center; padding:60px 20px; color:var(--muted); font-size:15px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📖 History</h1>
+    <p class="subtitle">Your browsing history</p>
+    <div class="toolbar">
+      <input type="text" id="search" placeholder="Search history…" autocomplete="off"/>
+      <button class="clear-btn" id="clear-btn">Clear all</button>
+    </div>
+    <div id="list"></div>
+  </div>
+  <script>
+    const ipc = window.ipc;
+    let all = [];
+
+    async function load() {
+      all = await ipc.invoke('get-history');
+      render(all);
+    }
+
+    function render(items) {
+      const list = document.getElementById('list');
+      if (!items.length) { list.innerHTML = '<div class="empty">No history yet</div>'; return; }
+      // Group by day
+      const groups = {};
+      items.forEach(item => {
+        const d = new Date(item.visited);
+        const key = d.toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long' });
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(item);
+      });
+      list.innerHTML = '';
+      for (const [day, entries] of Object.entries(groups)) {
+        const group = document.createElement('div');
+        group.className = 'day-group';
+        group.innerHTML = `<div class="day-label">${day}</div>`;
+        entries.forEach(item => {
+          const el = document.createElement('div');
+          el.className = 'hist-item';
+          let domain = '';
+          try { domain = new URL(item.url).hostname; } catch(e) {}
+          const time = new Date(item.visited).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+          el.innerHTML = `
+            <div class="fav" id="fav-${Math.random().toString(36).slice(2)}">${domain[0]?.toUpperCase()||'?'}</div>
+            <div class="info">
+              <div class="h-title">${item.title || domain}</div>
+              <div class="h-url">${item.url}</div>
+            </div>
+            <div class="h-time">${time}</div>`;
+          // Try favicon
+          if (domain) {
+            const fav = el.querySelector('.fav');
+            const img = new Image();
+            img.onload = () => { fav.innerHTML = ''; fav.appendChild(img); img.style.cssText='width:100%;height:100%;object-fit:cover'; };
+            img.src = 'https://' + domain + '/favicon.ico';
+          }
+          el.addEventListener('click', () => ipc.send('navigate', item.url));
+          group.appendChild(el);
+        });
+        list.appendChild(group);
+      }
+    }
+
+    document.getElementById('search').addEventListener('input', e => {
+      const q = e.target.value.toLowerCase();
+      render(q ? all.filter(i => (i.title||'').toLowerCase().includes(q) || i.url.toLowerCase().includes(q)) : all);
+    });
+
+    document.getElementById('clear-btn').addEventListener('click', async () => {
+      if (confirm('Clear all history?')) { all = await ipc.invoke('clear-history'); render(all); }
+    });
+
+    load();
+  </script>
+</body>
+</html>

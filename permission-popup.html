@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Permission</title>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600&family=DM+Mono:wght@400&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --accent: #8b6cf7;
+      --pink: #f06292;
+      --bg: #13111e;
+      --border: rgba(255,255,255,0.08);
+      --text: #e8e0ff;
+      --muted: rgba(232,224,255,0.45);
+      --font: 'Fredoka', sans-serif;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 16px;
+      border: 1px solid rgba(139,108,247,0.4);
+      border-radius: 14px;
+      overflow: hidden;
+      user-select: none;
+      -webkit-app-region: drag;
+    }
+    #icon { font-size: 28px; flex-shrink: 0; -webkit-app-region: no-drag; }
+    #text { flex: 1; font-size: 13px; line-height: 1.4; -webkit-app-region: no-drag; }
+    #text strong { color: var(--accent); }
+    #btns { display: flex; gap: 8px; flex-shrink: 0; -webkit-app-region: no-drag; }
+    .btn {
+      border-radius: 8px; font-family: var(--font);
+      font-size: 13px; font-weight: 600;
+      padding: 7px 16px; cursor: pointer; border: none;
+      transition: opacity 0.15s;
+    }
+    #allow {
+      background: linear-gradient(135deg, var(--accent), var(--pink));
+      color: white;
+    }
+    #deny {
+      background: rgba(255,255,255,0.08);
+      color: var(--muted);
+      border: 1px solid var(--border);
+    }
+    #allow:hover { opacity: 0.85; }
+    #deny:hover { color: var(--text); }
+  </style>
+</head>
+<body>
+  <div id="icon">🔒</div>
+  <div id="text">Loading...</div>
+  <div id="btns">
+    <button class="btn" id="allow">Allow</button>
+    <button class="btn" id="deny">Deny</button>
+  </div>
+  <script>
+    const ipc = window.ipc;
+    const params = new URLSearchParams(window.location.search);
+    const domain     = params.get('domain') || '';
+    const permission = params.get('permission') || '';
+    const label      = params.get('label') || permission;
+
+    const icons = { geolocation: '📍', media: '🎤', notifications: '🔔', midi: '🎹', clipboard: '📋' };
+    document.getElementById('icon').textContent = icons[permission] || '🔒';
+    document.getElementById('text').innerHTML = `<strong>${domain}</strong> wants to access ${label}.`;
+
+    document.getElementById('allow').addEventListener('click', () => {
+      ipc.send('permission-response', { domain, permission, granted: true });
+      ipc.send('close-permission-popup');
+    });
+    document.getElementById('deny').addEventListener('click', () => {
+      ipc.send('permission-response', { domain, permission, granted: false });
+      ipc.send('close-permission-popup');
+    });
+
+    // Auto-deny after 30s
+    setTimeout(() => {
+      ipc.send('permission-response', { domain, permission, granted: false });
+      ipc.send('close-permission-popup');
+    }, 30000);
+  </script>
+</body>
+</html>
