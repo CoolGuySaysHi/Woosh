@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'none'">
+  <title>AI Assistant</title>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script>
+    // Grab ipcRenderer as early as possible — works with nodeIntegration:true
+    try { window._ipc = require('electron').ipcRenderer; } catch(e) { window._ipc = window.ipc || null; }
+  </script>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    :root {
+      --accent:#8b6cf7; --pink:#f06292;
+      --bg:#0f0d1c; --bg2:#1a1730;
+      --border:rgba(255,255,255,0.08);
+      --text:#e8e0ff; --muted:rgba(232,224,255,0.45);
+      --font:'Fredoka',sans-serif; --mono:'DM Mono',monospace;
+    }
+    html, body { height:100%; overflow:hidden; }
+    body {
+      background:var(--bg); color:var(--text);
+      font-family:var(--font);
+      display:flex; flex-direction:column;
+      border-left:1px solid rgba(139,108,247,0.3);
+    }
+
+    /* Header */
+    #header {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:12px 14px; border-bottom:1px solid var(--border);
+      flex-shrink:0; -webkit-app-region:drag;
+    }
+    #header-title {
+      display:flex; align-items:center; gap:8px;
+      font-size:14px; font-weight:600;
+    }
+    #ai-icon {
+      font-size:16px;
+      background:linear-gradient(135deg,var(--accent),var(--pink));
+      background-clip:text; -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+      animation:pulse 3s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.55} }
+    #close-btn {
+      -webkit-app-region:no-drag; background:transparent; border:none;
+      color:var(--muted); cursor:pointer; font-size:16px;
+      padding:3px 8px; border-radius:6px;
+    }
+    #close-btn:hover { background:rgba(255,255,255,0.07); color:var(--text); }
+
+    /* Messages */
+    #messages {
+      flex:1; overflow-y:auto; padding:14px;
+      display:flex; flex-direction:column; gap:14px;
+      scroll-behavior:smooth;
+    }
+    #messages::-webkit-scrollbar { width:4px; }
+    #messages::-webkit-scrollbar-thumb { background:rgba(139,108,247,0.25); border-radius:2px; }
+
+    .msg { display:flex; flex-direction:column; gap:5px; }
+    .msg-label { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:rgba(232,224,255,0.3); }
+    .msg-bubble {
+      font-size:13px; line-height:1.65; color:var(--text);
+      border-radius:10px; padding:10px 12px;
+      border:1px solid var(--border);
+    }
+    .msg.user .msg-bubble { background:rgba(139,108,247,0.1); border-color:rgba(139,108,247,0.2); }
+    .msg.assistant .msg-bubble { background:rgba(255,255,255,0.03); }
+    .msg-bubble strong { color:#c4b5fd; }
+    .msg-bubble em { color:rgba(232,224,255,0.65); }
+    .msg-bubble code { background:rgba(139,108,247,0.15); border-radius:4px; padding:1px 5px; font-family:var(--mono); font-size:12px; }
+    .msg-bubble ul, .msg-bubble ol { padding-left:18px; }
+    .msg-bubble li { margin-bottom:3px; }
+    .msg-bubble p + p { margin-top:6px; }
+    .cursor { display:inline-block; width:2px; height:13px; background:var(--accent); margin-left:2px; vertical-align:middle; animation:blink 0.7s ease-in-out infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+    /* Empty state */
+    .empty {
+      display:flex; flex-direction:column; align-items:center;
+      gap:10px; padding:32px 16px; text-align:center; color:var(--muted); font-size:13px;
+    }
+    .empty-icon { font-size:40px; }
+
+    /* Suggestions */
+    #suggestions {
+      display:flex; gap:6px; padding:8px 14px;
+      flex-wrap:wrap; flex-shrink:0;
+      border-top:1px solid var(--border);
+    }
+    .suggestion {
+      background:rgba(139,108,247,0.1); border:1px solid rgba(139,108,247,0.2);
+      border-radius:20px; color:rgba(232,224,255,0.65);
+      font-family:var(--font); font-size:11px;
+      padding:5px 10px; cursor:pointer; transition:all 0.15s; white-space:nowrap;
+    }
+    .suggestion:hover { background:rgba(139,108,247,0.2); color:var(--text); }
+
+    /* Input */
+    #input-wrap {
+      display:flex; align-items:center; gap:8px;
+      padding:10px 14px; border-top:1px solid var(--border); flex-shrink:0;
+    }
+    #input {
+      flex:1; background:rgba(255,255,255,0.05);
+      border:1px solid var(--border); border-radius:10px;
+      padding:9px 12px; color:var(--text);
+      font-family:var(--font); font-size:13px; outline:none;
+    }
+    #input:focus { border-color:rgba(139,108,247,0.5); }
+    #input::placeholder { color:rgba(232,224,255,0.25); }
+    #input:disabled { opacity:0.5; }
+    #send-btn {
+      width:34px; height:34px; border-radius:10px; flex-shrink:0;
+      background:linear-gradient(135deg,var(--accent),var(--pink));
+      border:none; cursor:pointer;
+      display:flex; align-items:center; justify-content:center;
+      transition:opacity 0.15s;
+    }
+    #send-btn:hover { opacity:0.85; }
+    #send-btn:disabled { opacity:0.35; cursor:default; }
+    #send-btn svg { width:14px; height:14px; stroke:white; fill:none; stroke-width:2.5; stroke-linecap:round; stroke-linejoin:round; }
+
+    /* No-key setup screen */
+    #setup-screen {
+      display:none; flex-direction:column; align-items:center;
+      gap:14px; padding:28px 18px; text-align:center;
+    }
+    #setup-screen.visible { display:flex; }
+    .setup-icon { font-size:40px; }
+    .setup-title { font-size:16px; font-weight:700; }
+    .setup-sub { font-size:13px; color:var(--muted); line-height:1.5; }
+    .setup-input {
+      width:100%; background:rgba(255,255,255,0.06);
+      border:1px solid var(--border); border-radius:10px;
+      padding:10px 12px; color:var(--text);
+      font-family:var(--mono); font-size:12px; outline:none;
+    }
+    .setup-input:focus { border-color:var(--accent); }
+    .setup-input::placeholder { color:var(--muted); }
+    .setup-save-btn {
+      width:100%; padding:11px; border:none; border-radius:10px;
+      background:linear-gradient(135deg,var(--accent),var(--pink));
+      color:white; font-family:var(--font); font-size:14px;
+      font-weight:600; cursor:pointer; transition:opacity 0.15s;
+    }
+    .setup-save-btn:hover { opacity:0.85; }
+    .setup-link { font-size:12px; color:var(--accent); text-decoration:none; }
+    .setup-link:hover { text-decoration:underline; }
+    .setup-settings { font-size:11px; color:var(--muted); cursor:pointer; }
+    .setup-settings span { color:var(--accent); }
+  </style>
+</head>
+<body>
+  <div id="header">
+    <div id="header-title">
+      <span id="ai-icon">✦</span>
+      <span>AI Assistant</span>
+    </div>
+    <button id="close-btn">✕</button>
+  </div>
+
+  <!-- Chat view -->
+  <div id="messages"></div>
+  <div id="suggestions">
+    <button class="suggestion" data-q="Summarise this page in a few sentences">📝 Summarise</button>
+    <button class="suggestion" data-q="What are the key points on this page?">🔑 Key points</button>
+    <button class="suggestion" data-q="What is the main argument or conclusion?">💡 Main idea</button>
+  </div>
+  <div id="input-wrap">
+    <input id="input" type="text" placeholder="Ask anything about this page…" autocomplete="off"/>
+    <button id="send-btn">
+      <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+    </button>
+  </div>
+
+  <!-- No-key setup screen (shown when no API key) -->
+  <div id="setup-screen">
+    <div class="setup-icon">✦</div>
+    <div class="setup-title">Set up AI Assistant</div>
+    <div class="setup-sub">You need a free Groq API key.<br/>Takes 30 seconds, no credit card needed.</div>
+    <input class="setup-input" type="password" id="setup-key-input" placeholder="Paste your key here (gsk_…)" spellcheck="false"/>
+    <button class="setup-save-btn" id="setup-save-btn">Save key &amp; continue</button>
+    <a class="setup-link" href="https://console.groq.com" target="_blank">Get a free key at console.groq.com →</a>
+    <div class="setup-settings">Or open <span id="goto-settings">woosh://settings</span></div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+    const ipc = window._ipc || window.ipc;
+    if (!ipc) { document.body.innerHTML = '<div style="color:#f55d5d;padding:20px;font-family:sans-serif">IPC unavailable. Check nodeIntegration is true in main.js for aiWindow.</div>'; return; }
+    let streaming = false;
+    let isFirstMsg = true;
+
+    // ── Init ──────────────────────────────────────────────────
+    showEmpty();
+
+    document.getElementById('close-btn').addEventListener('click', () => ipc.send('ai-sidebar-close'));
+
+    // ── Suggestions ──────────────────────────────────────────
+    document.querySelectorAll('.suggestion').forEach(btn => {
+      btn.addEventListener('click', () => { if (!streaming) sendMessage(btn.dataset.q); });
+    });
+
+    // ── Input ────────────────────────────────────────────────
+    const input   = document.getElementById('input');
+    const sendBtn = document.getElementById('send-btn');
+    input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input.value); } });
+    sendBtn.addEventListener('click', () => sendMessage(input.value));
+
+    async function sendMessage(text) {
+      text = text.trim();
+      if (!text || streaming) return;
+      streaming = true;
+      setInputEnabled(false);
+
+      if (isFirstMsg) {
+        document.getElementById('messages').innerHTML = '';
+        document.getElementById('suggestions').style.display = 'none';
+        await ipc.invoke('ai-get-page-text');
+        isFirstMsg = false;
+      }
+
+      addBubble('user', text);
+      input.value = '';
+
+      const assistantBubble = addBubble('assistant', '');
+      const cursor = document.createElement('span');
+      cursor.className = 'cursor';
+      assistantBubble.appendChild(cursor);
+      scrollBottom();
+
+      ipc.send('ai-ask', { question: text, isFirstMessage: false });
+    }
+
+    // ── Streaming ────────────────────────────────────────────
+    ipc.on('ai-stream-chunk', (e, chunk) => {
+      const bubbles = document.querySelectorAll('.msg.assistant .msg-bubble');
+      const last = bubbles[bubbles.length - 1];
+      if (!last) return;
+      last.querySelector('.cursor')?.remove();
+      last.dataset.raw = (last.dataset.raw || '') + chunk;
+      last.innerHTML = md(last.dataset.raw);
+      const c = document.createElement('span'); c.className = 'cursor';
+      last.appendChild(c);
+      scrollBottom();
+    });
+
+    ipc.on('ai-stream-done', () => {
+      const bubbles = document.querySelectorAll('.msg.assistant .msg-bubble');
+      const last = bubbles[bubbles.length - 1];
+      if (last) { last.querySelector('.cursor')?.remove(); last.innerHTML = md(last.dataset.raw || ''); }
+      streaming = false;
+      setInputEnabled(true);
+      input.focus();
+    });
+
+    ipc.on('ai-stream-error', (e, msg) => {
+      const bubbles = document.querySelectorAll('.msg.assistant .msg-bubble');
+      const last = bubbles[bubbles.length - 1];
+      if (last) last.innerHTML = `<span style="color:#f55d5d">⚠ ${msg}</span>`;
+      streaming = false;
+      setInputEnabled(true);
+    });
+
+    ipc.on('ai-no-key', () => {
+      streaming = false;
+      setInputEnabled(true);
+      showSetup();
+    });
+
+    // ── Setup screen ─────────────────────────────────────────
+    function showSetup() {
+      document.getElementById('messages').style.display = 'none';
+      document.getElementById('suggestions').style.display = 'none';
+      document.getElementById('input-wrap').style.display = 'none';
+      document.getElementById('setup-screen').classList.add('visible');
+    }
+    function hideSetup() {
+      document.getElementById('messages').style.display = 'flex';
+      document.getElementById('suggestions').style.display = 'flex';
+      document.getElementById('input-wrap').style.display = 'flex';
+      document.getElementById('setup-screen').classList.remove('visible');
+    }
+
+    document.getElementById('setup-save-btn').addEventListener('click', async () => {
+      const key = document.getElementById('setup-key-input').value.trim();
+      if (!key) return;
+      await ipc.invoke('save-settings', { groqApiKey: key });
+      hideSetup();
+      isFirstMsg = true;
+      showEmpty();
+    });
+
+    document.getElementById('goto-settings').addEventListener('click', () => {
+      ipc.send('navigate', 'woosh://settings');
+      ipc.send('ai-sidebar-close');
+    });
+
+    // ── Helpers ───────────────────────────────────────────────
+    function showEmpty() {
+      document.getElementById('messages').innerHTML = `
+        <div class="empty">
+          <div class="empty-icon">✦</div>
+          <div>Ask me anything about this page, or tap a suggestion below.</div>
+        </div>`;
+    }
+
+    function addBubble(role, text) {
+      const msg = document.createElement('div');
+      msg.className = `msg ${role}`;
+      msg.innerHTML = `<div class="msg-label">${role === 'user' ? 'You' : '✦ Woosh AI'}</div><div class="msg-bubble"></div>`;
+      document.getElementById('messages').appendChild(msg);
+      const bubble = msg.querySelector('.msg-bubble');
+      if (text) bubble.innerHTML = md(text);
+      scrollBottom();
+      return bubble;
+    }
+
+    function scrollBottom() {
+      const m = document.getElementById('messages');
+      m.scrollTop = m.scrollHeight;
+    }
+
+    function setInputEnabled(on) {
+      input.disabled = !on;
+      sendBtn.disabled = !on;
+    }
+
+    // Tab switch — reset state
+    ipc.on('ai-tab-switched', () => {
+      isFirstMsg = true;
+      document.getElementById('messages').innerHTML = '';
+      document.getElementById('suggestions').style.display = 'flex';
+      showEmpty();
+    });
+
+    // Simple markdown renderer
+    function md(text) {
+      if (!text) return '';
+      return text
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g,'<em>$1</em>')
+        .replace(/`([^`]+)`/g,'<code>$1</code>')
+        .replace(/^#{1,3} (.+)$/gm,'<strong>$1</strong>')
+        .replace(/^[-•*] (.+)$/gm,'<li>$1</li>')
+        .replace(/(<li>[\s\S]*?<\/li>)/g,'<ul>$1</ul>')
+        .replace(/\n\n+/g,'</p><p>')
+        .replace(/\n/g,'<br>');
+    }
+    }); // end DOMContentLoaded
+  </script>
+</body>
+</html>

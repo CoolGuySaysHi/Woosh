@@ -3,6 +3,65 @@
 // ipc is set by preload.js — access via getter so it's always current
 const ipc = window.ipc;
 
+// ── Security: sanitise any user/web-sourced strings before innerHTML ──
+function esc(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// ── Theme system ───────────────────────────────────────────────
+const THEMES = {
+  woosh:    { name:'Woosh (Default)', accent:'#8b6cf7', pink:'#f06bbd', bgDeep:'#0a0a0f', bgToolbar:'#111118', bgTabBar:'#0d0d14', bgTab:'#161622', bgTabActive:'#1e1e2e', bgInput:'#1a1a26', textPrimary:'#eeeaf8', textSecondary:'#7a7590', font:'Fredoka' },
+  ocean:    { name:'Ocean',           accent:'#38bdf8', pink:'#34d399', bgDeep:'#030f1c', bgToolbar:'#071828', bgTabBar:'#040e18', bgTab:'#071525', bgTabActive:'#0c2035', bgInput:'#091d2e', textPrimary:'#e0f2fe', textSecondary:'#5a8aaa', font:'Inter' },
+  rose:     { name:'Rose',            accent:'#f43f5e', pink:'#fb923c', bgDeep:'#0f0509', bgToolbar:'#1a0810', bgTabBar:'#120607', bgTab:'#180a0e', bgTabActive:'#220d14', bgInput:'#1e0b12', textPrimary:'#fce7f3', textSecondary:'#8a5060', font:'Outfit' },
+  forest:   { name:'Forest',          accent:'#4ade80', pink:'#a3e635', bgDeep:'#020b04', bgToolbar:'#071409', bgTabBar:'#040d05', bgTab:'#071209', bgTabActive:'#0c1f0e', bgInput:'#091509', textPrimary:'#dcfce7', textSecondary:'#4a7a55', font:'Space Grotesk' },
+  midnight: { name:'Midnight',        accent:'#a78bfa', pink:'#e879f9', bgDeep:'#000000', bgToolbar:'#0a0a0a', bgTabBar:'#050505', bgTab:'#0f0f0f', bgTabActive:'#161616', bgInput:'#111111', textPrimary:'#f5f5f5', textSecondary:'#666666', font:'Syne' },
+  custom:   { name:'Custom' }
+};
+
+function applyTheme(t) {
+  const s = document.documentElement.style;
+  s.setProperty('--accent', t.accent);
+  s.setProperty('--purple', t.accent);
+  s.setProperty('--pink', t.pink);
+  s.setProperty('--accent-glow', hexRgba(t.accent, 0.35));
+  s.setProperty('--accent-dim',  hexRgba(t.accent, 0.15));
+  s.setProperty('--border-focus',hexRgba(t.accent, 0.6));
+  s.setProperty('--bg-deep',      t.bgDeep);
+  s.setProperty('--bg-toolbar',   t.bgToolbar);
+  s.setProperty('--bg-tab-bar',   t.bgTabBar);
+  s.setProperty('--bg-tab',       t.bgTab);
+  s.setProperty('--bg-tab-active',t.bgTabActive);
+  s.setProperty('--bg-input',     t.bgInput);
+  s.setProperty('--text-primary', t.textPrimary);
+  s.setProperty('--text-secondary',t.textSecondary);
+  if (t.font) s.setProperty('--font-ui', `'${t.font}', sans-serif`);
+}
+function hexRgba(hex, a) {
+  const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+// Apply saved theme on startup
+(async () => {
+  try {
+    const s = await ipc.invoke('get-settings');
+    if (!s.theme) return;
+    if (s.theme.preset && s.theme.preset !== 'custom' && THEMES[s.theme.preset]) {
+      applyTheme(THEMES[s.theme.preset]);
+    } else if (s.theme.custom) {
+      applyTheme(s.theme.custom);
+    }
+  } catch(e) {}
+})();
+
+// Listen for live theme changes from settings page
+ipc.on('theme-changed', (e, themeData) => applyTheme(themeData));
+
 // Elements
 const addressbar      = document.getElementById('addressbar');
 const btnBack         = document.getElementById('btn-back');
@@ -299,6 +358,11 @@ ipc.on('tab-switched', (e, id) => {
   }
 });
 
+// Handle PWA shortcut launch
+ipc.on('navigate-to', (e, url) => {
+  ipc.send('navigate', url);
+});
+
 ipc.on('url-changed', (e, url) => {
   currentUrl = url;
   if (document.activeElement !== addressbar) {
@@ -438,7 +502,7 @@ function renderPasswordList(passwords) {
 
     const info = document.createElement('div');
     info.className = 'password-info';
-    info.innerHTML = `<div class="password-domain">${p.domain}</div><div class="password-username">${p.username}</div>`;
+    info.innerHTML = `<div class="password-domain">${esc(p.domain)}</div><div class="password-username">${esc(p.username)}</div>`;
 
     const actions = document.createElement('div');
     actions.className = 'password-actions';
@@ -566,7 +630,7 @@ async function refreshShieldPopup() {
     adBlockState.whitelist.forEach(d => {
       const row = document.createElement('div');
       row.className = 'whitelist-item';
-      row.innerHTML = `<span>${d}</span><button class="whitelist-remove" data-domain="${d}">✕</button>`;
+      row.innerHTML = `<span>${esc(d)}</span><button class="whitelist-remove" data-domain="${esc(d)}">✕</button>`;
       row.querySelector('.whitelist-remove').addEventListener('click', () => {
         ipc.send('remove-from-whitelist', d);
         setTimeout(refreshShieldPopup, 100);
@@ -633,6 +697,11 @@ const btnProfile = document.getElementById('btn-profile');
 if (btnProfile) {
   btnProfile.addEventListener('click', () => ipc.send('open-profile-popup'));
 }
+
+document.getElementById('btn-settings')?.addEventListener('click', () => {
+  ipc.send('navigate', 'woosh://settings');
+});
+
 ipc.on('sync-state-changed', (e, { signedIn }) => {
   const dot = document.getElementById('profile-sync-dot');
   if (dot) dot.classList.toggle('visible', signedIn);
@@ -657,11 +726,11 @@ ipc.on('download-started', (e, { id, filename, totalBytes, savePath }) => {
   item.innerHTML = `
     <div class="dl-icon">${fileIcon(filename)}</div>
     <div class="dl-info">
-      <div class="dl-name">${filename}</div>
-      <div class="dl-status" id="dl-status-${id}">Starting…</div>
-      <div class="dl-progress-wrap"><div class="dl-progress-bar" id="dl-bar-${id}" style="width:0%"></div></div>
+      <div class="dl-name">${esc(filename)}</div>
+      <div class="dl-status" id="dl-status-${esc(id)}">Starting…</div>
+      <div class="dl-progress-wrap"><div class="dl-progress-bar" id="dl-bar-${esc(id)}" style="width:0%"></div></div>
     </div>
-    <button class="dl-action" id="dl-action-${id}">Cancel</button>`;
+    <button class="dl-action" id="dl-action-${esc(id)}">Cancel</button>`;
   downloadItems.appendChild(item);
 });
 
@@ -706,3 +775,17 @@ function formatBytes(b) {
   if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
   return (b / 1048576).toFixed(1) + ' MB';
 }
+
+
+// ─── AI Sidebar button ─────────────────────────────────────────
+document.getElementById('btn-ai')?.addEventListener('click', () => ipc.send('ai-sidebar-toggle'));
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.shiftKey && e.key === 'A') { e.preventDefault(); ipc.send('ai-sidebar-toggle'); }
+});
+ipc.on('ai-sidebar-state', (e, open) => {
+  document.getElementById('btn-ai')?.classList.toggle('active', open);
+});
+// Notify AI window when tab switches so it can reset
+ipc.on('tab-switched', () => {
+  ipc.send('ai-tab-switched-notify');
+});

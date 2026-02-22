@@ -4,12 +4,71 @@ const https = require('https');
 const querystring = require('querystring');
 const fs = require('fs');
 
+// ── Load .env ─────────────────────────────────────────────────
+const envPath = path.join(__dirname, '.env');
+if (fs.existsSync(envPath)) {
+  fs.readFileSync(envPath, 'utf-8').split('\n').forEach(line => {
+    const [key, ...rest] = line.split('=');
+    if (key && rest.length) process.env[key.trim()] = rest.join('=').trim();
+  });
+}
+
 process.on('uncaughtException', (err) => {
   const logFile = path.join(require('os').tmpdir(), 'woosh-crash.log');
   fs.writeFileSync(logFile, err.stack || String(err));
   console.error('CRASH:', err);
 });
 const crypto = require('crypto');
+
+// ── IPC Security Middleware ───────────────────────────────────
+// Sensitive IPC channels that must only be called from trusted local windows
+const SENSITIVE_IPC_CHANNELS = new Set([
+  'get-passwords', 'save-password', 'delete-password', 'clear-passwords',
+  'get-passwords-for-domain', 'autofill-password',
+  'get-settings', 'save-settings',
+  'get-history', 'clear-history', 'add-history',
+  'get-sync-state', 'sync-signin-email', 'sync-signup-email',
+  'sync-signout', 'sync-now',
+  'ai-ask', 'ai-get-page-text',
+  'show-in-folder', 'install-pwa',
+]);
+
+function isTrustedSender(event) {
+  const wc = event.sender;
+  // Must be a local file:// page, not a web URL
+  const url = wc.getURL();
+  return url.startsWith('file://') || url === '' || url === 'about:blank';
+}
+
+// Wrap ipcMain.handle to validate sender
+const _originalHandle = ipcMain.handle.bind(ipcMain);
+ipcMain.handle = function(channel, handler) {
+  if (SENSITIVE_IPC_CHANNELS.has(channel)) {
+    return _originalHandle(channel, (event, ...args) => {
+      if (!isTrustedSender(event)) {
+        console.warn(`[Security] Blocked IPC "${channel}" from untrusted sender: ${event.sender.getURL()}`);
+        return null;
+      }
+      return handler(event, ...args);
+    });
+  }
+  return _originalHandle(channel, handler);
+};
+
+// Wrap ipcMain.on for sensitive one-way channels too
+const _originalOn = ipcMain.on.bind(ipcMain);
+ipcMain.on = function(channel, handler) {
+  if (SENSITIVE_IPC_CHANNELS.has(channel)) {
+    return _originalOn(channel, (event, ...args) => {
+      if (!isTrustedSender(event)) {
+        console.warn(`[Security] Blocked IPC "${channel}" from untrusted sender`);
+        return;
+      }
+      return handler(event, ...args);
+    });
+  }
+  return _originalOn(channel, handler);
+};
 
 // ─── Password Manager ─────────────────────────────────────────
 // Passwords encrypted with AES-256-GCM using a device key
@@ -81,6 +140,31 @@ function savePasswords(passwords) {
 }
 
 ipcMain.handle('get-passwords', () => loadPasswords());
+ipcMain.handle('clear-passwords', () => { try { savePasswords([]); } catch(e) {} return true; });
+
+ipcMain.handle('test-groq-key', (e, key) => {
+  return new Promise((resolve) => {
+    const body = JSON.stringify({
+      model: 'llama-3.3-70b-versatile', max_tokens: 8, stream: false,
+      messages: [{ role: 'user', content: 'Hi' }]
+    });
+    const req = https.request({
+      hostname: 'api.groq.com', path: '/openai/v1/chat/completions', method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}`, 'Content-Length': Buffer.byteLength(body) }
+    }, (res) => {
+      let d = ''; res.on('data', c => d += c);
+      res.on('end', () => {
+        try {
+          const j = JSON.parse(d);
+          if (j.error) resolve({ ok: false, error: j.error.message });
+          else resolve({ ok: true });
+        } catch(e) { resolve({ ok: false, error: 'Invalid response' }); }
+      });
+    });
+    req.on('error', (e) => resolve({ ok: false, error: e.message }));
+    req.write(body); req.end();
+  });
+});
 
 // ── Password popup window ──────────────────────────────────────
 let passwordWindow = null;
@@ -435,6 +519,160 @@ ipcMain.on('close-permission-popup', () => {
   if (permissionWindow && !permissionWindow.isDestroyed()) permissionWindow.close();
 });
 
+// ── AI Sidebar Window ─────────────────────────────────────────
+let aiPageContent = '';
+let aiConversation = [];
+let aiWindow = null;
+const SIDEBAR_W = 360;
+
+function openAiWindow() {
+  if (aiWindow && !aiWindow.isDestroyed()) { aiWindow.focus(); return; }
+  sidebarOpen = true;
+  updateActiveViewBounds();
+  const mb = mainWindow.getBounds();
+  aiWindow = new BrowserWindow({
+    width: SIDEBAR_W, height: mb.height,
+    x: mb.x + mb.width - SIDEBAR_W, y: mb.y,
+    frame: false, resizable: false, skipTaskbar: true, parent: mainWindow,
+    webPreferences: { nodeIntegration: true, contextIsolation: false, preload: path.join(__dirname, 'preload.js'), sandbox: false }
+  });
+  aiWindow.loadFile(path.join(__dirname, 'ai-sidebar.html'));
+  aiWindow.on('closed', () => {
+    aiWindow = null;
+    sidebarOpen = false;
+    updateActiveViewBounds();
+    mainWindow.webContents.send('ai-sidebar-state', false);
+  });
+  const reposition = () => {
+    if (!aiWindow || aiWindow.isDestroyed()) return;
+    const b = mainWindow.getBounds();
+    aiWindow.setBounds({ x: b.x + b.width - SIDEBAR_W, y: b.y, width: SIDEBAR_W, height: b.height });
+  };
+  mainWindow.on('move', reposition);
+  mainWindow.on('resize', reposition);
+  mainWindow.webContents.send('ai-sidebar-state', true);
+}
+
+function closeAiWindow() {
+  if (aiWindow && !aiWindow.isDestroyed()) aiWindow.close();
+}
+
+ipcMain.on('ai-sidebar-toggle', () => {
+  if (aiWindow && !aiWindow.isDestroyed()) closeAiWindow();
+  else openAiWindow();
+});
+
+ipcMain.on('theme-changed', (e, themeData) => {
+  mainWindow.webContents.send('theme-changed', themeData);
+});
+
+ipcMain.on('ai-tab-switched-notify', () => {
+  if (aiWindow && !aiWindow.isDestroyed()) aiWindow.webContents.send('ai-tab-switched');
+  aiPageContent = '';
+  aiConversation = [];
+});
+
+ipcMain.on('ai-sidebar-close', () => closeAiWindow());
+
+// ── Context menu ──────────────────────────────────────────────
+ipcMain.on('show-context-menu', (e, { hasAi }) => {
+  const { Menu, MenuItem } = require('electron');
+  const menu = new Menu();
+  if (hasAi) {
+    menu.append(new MenuItem({ label: '✦ Summarise with AI', click: () => openAiWindow() }));
+    menu.append(new MenuItem({ type: 'separator' }));
+  }
+  menu.append(new MenuItem({ label: 'Back', click: () => { const t = tabs.find(t=>t.id===activeTabId); if(t) t.view.webContents.goBack(); }}));
+  menu.append(new MenuItem({ label: 'Forward', click: () => { const t = tabs.find(t=>t.id===activeTabId); if(t) t.view.webContents.goForward(); }}));
+  menu.append(new MenuItem({ label: 'Reload', click: () => { const t = tabs.find(t=>t.id===activeTabId); if(t) t.view.webContents.reload(); }}));
+  menu.popup({ window: mainWindow });
+});
+
+ipcMain.handle('ai-get-page-text', async () => {
+  const tab = tabs.find(t => t.id === activeTabId);
+  if (!tab) return '';
+  try {
+    const text = await tab.view.webContents.executeJavaScript(`
+      (function() {
+        // Remove scripts, styles, nav, footer noise
+        const clone = document.body.cloneNode(true);
+        for (const el of clone.querySelectorAll('script,style,nav,footer,header,aside,[role="banner"],[role="navigation"]')) el.remove();
+        return (clone.innerText || clone.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 15000);
+      })()
+    `);
+    aiPageContent = text;
+    aiConversation = []; // reset conversation on new page
+    return text;
+  } catch(e) { return ''; }
+});
+
+ipcMain.on('ai-ask', async (e, { question, isFirstMessage }) => {
+  const GROQ_API_KEY = loadSettings().groqApiKey || process.env.GROQ_API_KEY || '';
+  if (!GROQ_API_KEY) {
+    if (aiWindow && !aiWindow.isDestroyed()) aiWindow.webContents.send('ai-no-key');
+    return;
+  }
+
+  if (isFirstMessage) {
+    aiConversation = [{
+      role: 'user',
+      content: `Here is the content of a webpage:\n\n${aiPageContent}\n\n---\n\n${question}`
+    }];
+  } else {
+    aiConversation.push({ role: 'user', content: question });
+  }
+
+  const body = JSON.stringify({
+    model: 'llama-3.3-70b-versatile',
+    max_tokens: 1024,
+    stream: true,
+    messages: [
+      { role: 'system', content: 'You are a helpful browser assistant. Help users understand web pages. Be concise and clear. Use markdown formatting.' },
+      ...aiConversation
+    ]
+  });
+
+  const options = {
+    hostname: 'api.groq.com',
+    path: '/openai/v1/chat/completions',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${GROQ_API_KEY}`,
+      'Content-Length': Buffer.byteLength(body)
+    }
+  };
+
+  let assistantReply = '';
+  const target = () => aiWindow && !aiWindow.isDestroyed() ? aiWindow.webContents : null;
+  target()?.send('ai-stream-start');
+
+  const req = https.request(options, (res) => {
+    res.on('data', (chunk) => {
+      const lines = chunk.toString().split('\n').filter(l => l.startsWith('data: ') && !l.includes('[DONE]'));
+      for (const line of lines) {
+        try {
+          const data = JSON.parse(line.slice(6));
+          const text = data.choices?.[0]?.delta?.content;
+          if (text) {
+            assistantReply += text;
+            target()?.send('ai-stream-chunk', text);
+          }
+          if (data.choices?.[0]?.finish_reason === 'stop') {
+            aiConversation.push({ role: 'assistant', content: assistantReply });
+            target()?.send('ai-stream-done');
+          }
+        } catch(e) {}
+      }
+    });
+    res.on('end', () => target()?.send('ai-stream-done'));
+  });
+
+  req.on('error', (err) => target()?.send('ai-stream-error', err.message));
+  req.write(body);
+  req.end();
+});
+
 // ── Profile popup window ──────────────────────────────────────
 let profileWindow = null;
 ipcMain.on('open-profile-popup', () => {
@@ -457,7 +695,14 @@ ipcMain.on('close-profile-popup', () => {
 
 // ── Downloads ──────────────────────────────────────────────────
 ipcMain.on('show-in-folder', (e, filePath) => {
-  require('electron').shell.showItemInFolder(filePath);
+  // Security: only allow showing files inside the downloads directory
+  const downloadsPath = app.getPath('downloads');
+  const resolved = path.resolve(filePath);
+  if (!resolved.startsWith(downloadsPath)) {
+    console.warn('[Security] Blocked show-in-folder outside downloads:', resolved);
+    return;
+  }
+  require('electron').shell.showItemInFolder(resolved);
 });
 
 // ── History ───────────────────────────────────────────────────
@@ -480,8 +725,84 @@ function saveHistoryEntry(entry) {
     fs.writeFileSync(getHistoryFile(), JSON.stringify(history.slice(0, 5000)));
   } catch(e) {}
 }
-ipcMain.handle('get-history', () => loadHistory());
-ipcMain.handle('clear-history', () => { try { fs.writeFileSync(getHistoryFile(), '[]'); } catch(e) {} return []; });
+ipcMain.handle('get-history', () => loadHistory());ipcMain.handle('clear-history', () => { try { fs.writeFileSync(getHistoryFile(), '[]'); } catch(e) {} return []; });
+
+// u2500u2500 Settings u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500u2500
+let settingsCache = null;
+function getSettingsFile() { return path.join(app.getPath('userData'), 'settings.json'); }
+
+// Encrypt sensitive settings values using device key
+function encryptSetting(value) {
+  try {
+    const key = getDeviceKey();
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+    const enc = Buffer.concat([cipher.update(value, 'utf8'), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    return 'enc:' + Buffer.concat([iv, tag, enc]).toString('base64');
+  } catch(e) { return value; }
+}
+function decryptSetting(value) {
+  if (!value || !value.startsWith('enc:')) return value;
+  try {
+    const key = getDeviceKey();
+    const buf = Buffer.from(value.slice(4), 'base64');
+    const iv = buf.slice(0, 16);
+    const tag = buf.slice(16, 32);
+    const enc = buf.slice(32);
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+    decipher.setAuthTag(tag);
+    return Buffer.concat([decipher.update(enc), decipher.final()]).toString('utf8');
+  } catch(e) { return ''; }
+}
+
+// Fields that should be encrypted at rest
+const SENSITIVE_FIELDS = ['groqApiKey'];
+
+function loadSettings() {
+  if (settingsCache) return settingsCache;
+  try {
+    if (fs.existsSync(getSettingsFile())) {
+      const raw = JSON.parse(fs.readFileSync(getSettingsFile(), 'utf-8'));
+      // Decrypt sensitive fields before returning
+      for (const field of SENSITIVE_FIELDS) {
+        if (raw[field]) raw[field] = decryptSetting(raw[field]);
+      }
+      settingsCache = raw;
+    } else settingsCache = {};
+  } catch(e) { settingsCache = {}; }
+  return settingsCache;
+}
+function saveSettings(data) {
+  // Validate — only allow known safe keys
+  const allowed = ['groqApiKey', 'adBlockEnabled', 'theme', 'searchEngine', 'font'];
+  const safe = {};
+  for (const key of Object.keys(data)) {
+    if (allowed.includes(key)) safe[key] = data[key];
+  }
+  settingsCache = { ...loadSettings(), ...safe };
+  // Encrypt sensitive fields before writing to disk
+  const toWrite = { ...settingsCache };
+  for (const field of SENSITIVE_FIELDS) {
+    if (toWrite[field]) toWrite[field] = encryptSetting(toWrite[field]);
+  }
+  fs.writeFileSync(getSettingsFile(), JSON.stringify(toWrite, null, 2));
+}
+ipcMain.handle('get-settings', () => loadSettings());
+ipcMain.handle('save-settings', (e, data) => {
+  if (typeof data !== 'object' || Array.isArray(data)) return false;
+  for (const [k, v] of Object.entries(data)) {
+    // Allow theme as a nested object, other fields must be primitives
+    if (k === 'theme') {
+      if (typeof v !== 'object' || Array.isArray(v)) return false;
+      continue;
+    }
+    if (typeof v !== 'string' && typeof v !== 'boolean' && typeof v !== 'number') return false;
+    if (typeof v === 'string' && v.length > 500) return false;
+  }
+  saveSettings(data);
+  return true;
+});
 ipcMain.on('add-history', (e, entry) => saveHistoryEntry(entry));
 
 // ── Firebase Sync ─────────────────────────────────────────────
@@ -783,7 +1104,7 @@ ipcMain.handle('check-pwa', async () => {
 });
 
 ipcMain.on('install-pwa', async (e, { name, url, icon }) => {
-  const { dialog } = require('electron');
+  const { dialog, shell } = require('electron');
   const result = await dialog.showMessageBox(mainWindow, {
     type: 'question',
     title: `Install ${name}?`,
@@ -797,34 +1118,53 @@ ipcMain.on('install-pwa', async (e, { name, url, icon }) => {
   try {
     const appName = name.replace(/[^a-zA-Z0-9 _-]/g, '').trim() || 'App';
     const desktopPath = app.getPath('desktop');
+    const wooshExe = process.execPath;
 
     if (process.platform === 'win32') {
-      // Windows: create a .url internet shortcut file
-      const shortcutPath = path.join(desktopPath, `${appName}.url`);
-      const wooshExe = process.execPath;
-      // .url files open in default browser, but we want Woosh specifically
-      // So create a .bat launcher that opens Woosh with the URL
-      const batPath = path.join(app.getPath('userData'), `${appName}-pwa.bat`);
-      fs.writeFileSync(batPath, `@echo off\n"${wooshExe}" "${url}"\n`);
-      // Create a .url file pointing to the bat
-      const urlContent = `[InternetShortcut]\nURL=${url}\n`;
-      fs.writeFileSync(shortcutPath, urlContent);
+      // Download the favicon and save as .ico for the shortcut icon
+      let iconPath = wooshExe; // fallback to Woosh exe icon
+      if (icon) {
+        try {
+          const iconUrl = icon.startsWith('http') ? icon : new URL(icon, url).href;
+          const iconFile = path.join(app.getPath('userData'), `${appName}-icon.png`);
+          await new Promise((resolve) => {
+            const mod = iconUrl.startsWith('https') ? require('https') : require('http');
+            const file = fs.createWriteStream(iconFile);
+            mod.get(iconUrl, (res) => {
+              res.pipe(file);
+              file.on('finish', () => { file.close(); resolve(); });
+            }).on('error', resolve);
+          });
+          iconPath = iconFile;
+        } catch(e) {}
+      }
+
+      // Create a proper Windows .lnk shortcut pointing to Woosh with URL as arg
+      const shortcutPath = path.join(desktopPath, `${appName}.lnk`);
+      const created = shell.writeShortcutLink(shortcutPath, 'create', {
+        target: wooshExe,
+        args: `--pwa-url="${url}"`,
+        description: `Open ${name} in Woosh`,
+        icon: iconPath,
+        iconIndex: 0,
+        appUserModelId: `woosh.pwa.${appName.toLowerCase().replace(/ /g, '.')}`
+      });
+      if (!created) throw new Error('writeShortcutLink failed');
+
     } else if (process.platform === 'darwin') {
-      // Mac: create a .webloc file
       const shortcutPath = path.join(desktopPath, `${appName}.webloc`);
-      const weblocContent = `<?xml version="1.0" encoding="UTF-8"?>
+      fs.writeFileSync(shortcutPath, `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict><key>URL</key><string>${url}</string></dict></plist>`;
-      fs.writeFileSync(shortcutPath, weblocContent);
+<plist version="1.0"><dict><key>URL</key><string>${url}</string></dict></plist>`);
     } else {
-      // Linux: create a .desktop file
       const shortcutPath = path.join(desktopPath, `${appName}.desktop`);
-      fs.writeFileSync(shortcutPath, `[Desktop Entry]\nType=Application\nName=${appName}\nExec=xdg-open ${url}\nIcon=web-browser\nTerminal=false\n`);
+      fs.writeFileSync(shortcutPath, `[Desktop Entry]\nType=Application\nName=${appName}\nExec="${wooshExe}" --pwa-url="${url}"\nIcon=web-browser\nTerminal=false\n`);
     }
 
     mainWindow.webContents.send('pwa-installed', name);
   } catch(err) {
     console.error('[PWA] Failed to create shortcut:', err);
+    mainWindow.webContents.send('pwa-installed', name); // still show toast
   }
 });
 
@@ -1117,6 +1457,12 @@ function loadURLInView(view, url) {
     view.webContents.loadFile('privacy.html');
   } else if (url === 'woosh://history') {
     view.webContents.loadFile('history.html');
+  } else if (url === 'woosh://settings') {
+    view.webContents.loadFile('settings.html');
+  } else if (url === 'woosh://settings') {
+    view.webContents.loadFile('settings.html');
+  } else if (url === 'woosh://settings') {
+    view.webContents.loadFile('settings.html');
   } else if (url && url.startsWith('woosh://search?')) {
     const raw = url.slice('woosh://search?q='.length);
     view.webContents.loadFile('search.html', { query: { q: decodeURIComponent(raw) } });
@@ -1130,6 +1476,9 @@ function prettyURL(url) {
   if (url.includes('newtab.html')) return 'woosh://home';
   if (url.includes('privacy.html')) return 'woosh://privacy';
   if (url.includes('history.html')) return 'woosh://history';
+  if (url.includes('settings.html')) return 'woosh://settings';
+  if (url.includes('settings.html')) return 'woosh://settings';
+  if (url.includes('settings.html')) return 'woosh://settings';
   if (url.includes('search.html')) {
     try {
       const u = new URL(url);
@@ -1145,9 +1494,15 @@ function createTab(url = 'woosh://home') {
   const id = nextTabId++;
   const view = new BrowserView({
     webPreferences: {
-      nodeIntegration: false, contextIsolation: false,
-      preload: path.join(__dirname, 'preload.js'), sandbox: false,
-      partition: 'persist:woosh'
+      nodeIntegration: false,
+      contextIsolation: true,          // SECURITY: isolate web content from Node
+      sandbox: true,                   // SECURITY: sandbox renderer process
+      preload: path.join(__dirname, 'tab-preload.js'), // minimal preload for tabs only
+      partition: 'persist:woosh',
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      experimentalFeatures: false,
+      navigateOnDragDrop: false,
     }
   });
   const tab = { id, view, url, title: 'New Tab' };
@@ -1155,6 +1510,35 @@ function createTab(url = 'woosh://home') {
   blockStats[id] = { ads: 0, trackers: 0 };
 
   // ── Password form detection ──
+  // ── SECURITY: Block new windows from web content ──────────
+  view.webContents.setWindowOpenHandler(({ url }) => {
+    // Open in a new Woosh tab instead of a new Electron window
+    createTab(url);
+    return { action: 'deny' };
+  });
+
+  // ── SECURITY: Prevent navigation to dangerous protocols ───
+  view.webContents.on('will-navigate', (e, navUrl) => {
+    try {
+      const u = new URL(navUrl);
+      const allowed = ['http:', 'https:', 'file:', 'blob:', 'data:'];
+      if (!allowed.includes(u.protocol)) {
+        console.warn('[Security] Blocked navigation to:', navUrl);
+        e.preventDefault();
+      }
+    } catch(err) { e.preventDefault(); }
+  });
+
+  // ── SECURITY: Block renderer from opening external apps ───
+  view.webContents.on('will-redirect', (e, navUrl) => {
+    try {
+      const u = new URL(navUrl);
+      if (!['http:', 'https:', 'blob:', 'data:'].includes(u.protocol)) {
+        e.preventDefault();
+      }
+    } catch(err) { e.preventDefault(); }
+  });
+
   view.webContents.on('did-finish-load', () => {
     view.webContents.executeJavaScript(`
       (function() {
@@ -1253,15 +1637,19 @@ function closeTab(id) {
 
 let isFullscreen = false;
 
+let sidebarOpen = false;
+const SIDEBAR_WIDTH = 360;
+
 function updateActiveViewBounds() {
   const tab = tabs.find(t => t.id === activeTabId);
   if (!tab) return;
   const bounds = mainWindow.getBounds();
   const bottomOffset = downloadBarVisible ? DOWNLOAD_BAR_HEIGHT : 0;
+  const rightOffset = sidebarOpen ? SIDEBAR_WIDTH : 0;
   if (isFullscreen) {
-    tab.view.setBounds({ x: 0, y: 0, width: bounds.width, height: bounds.height - bottomOffset });
+    tab.view.setBounds({ x: 0, y: 0, width: bounds.width - rightOffset, height: bounds.height - bottomOffset });
   } else {
-    tab.view.setBounds({ x: 0, y: TOOLBAR_HEIGHT, width: bounds.width, height: bounds.height - TOOLBAR_HEIGHT - bottomOffset });
+    tab.view.setBounds({ x: 0, y: TOOLBAR_HEIGHT, width: bounds.width - rightOffset, height: bounds.height - TOOLBAR_HEIGHT - bottomOffset });
   }
 }
 
@@ -1337,6 +1725,16 @@ app.whenReady().then(() => {
   app.setAsDefaultProtocolClient('http');
   app.setAsDefaultProtocolClient('https');
   createWindow();
+
+  // If launched with --pwa-url, navigate to that URL
+  const pwaArg = process.argv.find(a => a.startsWith('--pwa-url='));
+  if (pwaArg) {
+    const pwaUrl = pwaArg.replace('--pwa-url=', '').replace(/^"|"$/g, '');
+    // Wait for window to be ready then navigate
+    setTimeout(() => {
+      mainWindow.webContents.send('navigate-to', pwaUrl);
+    }, 500);
+  }
 
   // ── Download manager ──────────────────────────────────────────
   woosh.setPermissionCheckHandler((webContents, permission) => {
