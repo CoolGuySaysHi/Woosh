@@ -17,46 +17,99 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 18
-      - run: npm install
-      - run: npm run build:win
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Windows installer
+        run: npm run build:win
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: softprops/action-gh-release@v2
+
+      - name: Upload to Release
         if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
         with:
           files: dist/*.exe
-      - uses: actions/upload-artifact@v4
+
+      - name: Upload as artifact
+        uses: actions/upload-artifact@v4
         with:
           name: Woosh-Windows
           path: dist/*.exe
 
   build-mac:
-    runs-on: macos-latest
+    # macos-14 runs on Apple Silicon (M1) — required for arm64/universal builds
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 18
-      - run: npm install
-      - name: Generate icon
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Generate .icns icon
         run: |
           mkdir -p assets/icon.iconset
           for size in 16 32 64 128 256 512; do
-            sips -z $size $size assets/icon_512.png --out assets/icon.iconset/icon_${size}x${size}.png
+            sips -z $size $size assets/icon_512.png --out assets/icon.iconset/icon_${size}x${size}.png 2>/dev/null || true
             if [ $size -le 256 ]; then
               double=$((size*2))
-              sips -z $double $double assets/icon_512.png --out assets/icon.iconset/icon_${size}x${size}@2x.png
+              sips -z $double $double assets/icon_512.png --out assets/icon.iconset/icon_${size}x${size}@2x.png 2>/dev/null || true
             fi
           done
-          iconutil -c icns assets/icon.iconset -o assets/icon.icns
-      - run: npm run build:mac
+          iconutil -c icns assets/icon.iconset -o assets/icon.icns 2>/dev/null || true
+
+      - name: Build Mac DMG (universal — Intel + Apple Silicon)
+        run: npm run build:mac
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: softprops/action-gh-release@v2
+          # Disable code signing — we're distributing unsigned
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Strip quarantine from app inside DMG
+        run: |
+          # Mount the DMG
+          DMG=$(ls dist/*.dmg | head -1)
+          echo "Processing: $DMG"
+          MOUNT=$(hdiutil attach "$DMG" -nobrowse -noverify | tail -1 | awk '{print $NF}')
+          echo "Mounted at: $MOUNT"
+
+          # Remove quarantine and fix permissions on the .app bundle
+          APP=$(ls "$MOUNT"/*.app | head -1)
+          echo "App: $APP"
+          xattr -cr "$APP"
+          chmod -R 755 "$APP"
+
+          # Detach
+          hdiutil detach "$MOUNT" -quiet
+
+          # Recreate the DMG from the cleaned app
+          # Copy app to temp dir
+          TMPDIR=$(mktemp -d)
+          cp -R "$APP" "$TMPDIR/"
+          APPNAME=$(basename "$APP")
+
+          # Build a fresh DMG from the clean copy
+          OUTDMG="dist/Woosh-universal.dmg"
+          hdiutil create -volname "Woosh" \
+            -srcfolder "$TMPDIR" \
+            -ov -format UDZO \
+            "$OUTDMG"
+
+          rm -rf "$TMPDIR"
+          echo "Created clean DMG: $OUTDMG"
+
+      - name: Upload to Release
         if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.dmg
-      - uses: actions/upload-artifact@v4
+          files: dist/Woosh-universal.dmg
+
+      - name: Upload as artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: Woosh-Mac
-          path: dist/*.dmg
+          name: Woosh-Mac-Universal
+          path: dist/Woosh-universal.dmg
