@@ -71,28 +71,45 @@ jobs:
 
       - name: Strip quarantine from app inside DMG
         run: |
-          # Mount the DMG
           DMG=$(ls dist/*.dmg | head -1)
           echo "Processing: $DMG"
-          MOUNT=$(hdiutil attach "$DMG" -nobrowse -noverify | tail -1 | awk '{print $NF}')
+
+          # Mount and capture the mount point properly
+          MOUNT_OUTPUT=$(hdiutil attach "$DMG" -nobrowse -noverify -plist)
+          MOUNT=$(echo "$MOUNT_OUTPUT" | python3 -c "
+import sys, plistlib
+data = plistlib.loads(sys.stdin.buffer.read())
+for e in data.get('system-entities', []):
+    mp = e.get('mount-point')
+    if mp:
+        print(mp)
+        break
+")
           echo "Mounted at: $MOUNT"
 
-          # Remove quarantine and fix permissions on the .app bundle
-          APP=$(ls "$MOUNT"/*.app | head -1)
+          # Find the .app
+          APP=$(ls "$MOUNT"/*.app 2>/dev/null | head -1)
           echo "App: $APP"
-          xattr -cr "$APP"
-          chmod -R 755 "$APP"
 
-          # Detach
-          hdiutil detach "$MOUNT" -quiet
+          if [ -z "$APP" ]; then
+            echo "ERROR: No .app found in DMG at $MOUNT"
+            ls -la "$MOUNT"
+            hdiutil detach "$MOUNT" -quiet || true
+            exit 1
+          fi
 
-          # Recreate the DMG from the cleaned app
-          # Copy app to temp dir
+          # Copy app out, clean it, repackage
           TMPDIR=$(mktemp -d)
           cp -R "$APP" "$TMPDIR/"
           APPNAME=$(basename "$APP")
 
-          # Build a fresh DMG from the clean copy
+          hdiutil detach "$MOUNT" -quiet
+
+          # Strip quarantine from the copy
+          xattr -cr "$TMPDIR/$APPNAME"
+          chmod -R 755 "$TMPDIR/$APPNAME"
+
+          # Build fresh clean DMG
           OUTDMG="dist/Woosh-universal.dmg"
           hdiutil create -volname "Woosh" \
             -srcfolder "$TMPDIR" \
